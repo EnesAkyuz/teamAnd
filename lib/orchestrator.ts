@@ -3,23 +3,51 @@ import type { AgentEvent, AgentSpec, BucketItem, EnvironmentSpec } from "./types
 
 const client = new Anthropic();
 
-function buildBucketContext(bucketItems: BucketItem[]): string {
-  const rules = bucketItems.filter((i) => i.category === "rule").map((i) => i.label);
-  const skills = bucketItems.filter((i) => i.category === "skill").map((i) => i.label);
-  const values = bucketItems.filter((i) => i.category === "value").map((i) => i.label);
-  const tools = bucketItems.filter((i) => i.category === "tool").map((i) => i.label);
-  const parts: string[] = [];
-  if (rules.length) parts.push(`Available Rules: ${rules.join(", ")}`);
-  if (skills.length) parts.push(`Available Skills: ${skills.join(", ")}`);
-  if (values.length) parts.push(`Available Values: ${values.join(", ")}`);
-  if (tools.length) parts.push(`Available Tools: ${tools.join(", ")}`);
-  return parts.join("\n");
+// Hard enforcement: strip any items not in the bucket allowlist
+function enforceAllowlist(spec: EnvironmentSpec, bucketItems: BucketItem[]): EnvironmentSpec {
+  if (bucketItems.length === 0) return spec;
+
+  const allowed = {
+    rules: new Set(bucketItems.filter((i) => i.category === "rule").map((i) => i.label)),
+    skills: new Set(bucketItems.filter((i) => i.category === "skill").map((i) => i.label)),
+    values: new Set(bucketItems.filter((i) => i.category === "value").map((i) => i.label)),
+    tools: new Set(bucketItems.filter((i) => i.category === "tool").map((i) => i.label)),
+  };
+
+  return {
+    ...spec,
+    rules: spec.rules.filter((r) => allowed.rules.has(r)),
+    agents: spec.agents.map((agent) => ({
+      ...agent,
+      skills: agent.skills.filter((s) => allowed.skills.has(s)),
+      values: agent.values.filter((v) => allowed.values.has(v)),
+      tools: agent.tools.filter((t) => allowed.tools.has(t)),
+      rules: agent.rules.filter((r) => allowed.rules.has(r)),
+    })),
+  };
 }
 
-const DESIGN_PROMPT = `You are an AI team architect. Given a task, design a team of specialized AI agents to accomplish it.
+function formatBucketForTool(bucketItems: BucketItem[]) {
+  return {
+    rules: bucketItems.filter((i) => i.category === "rule").map((i) => i.label),
+    skills: bucketItems.filter((i) => i.category === "skill").map((i) => i.label),
+    values: bucketItems.filter((i) => i.category === "value").map((i) => i.label),
+    tools: bucketItems.filter((i) => i.category === "tool").map((i) => i.label),
+  };
+}
 
-Return ONLY valid JSON matching this schema:
-{
+const RESOURCE_TOOL: Anthropic.Tool = {
+  name: "get_available_resources",
+  description:
+    "Fetch the environment's available resources. Returns the exact lists of rules, skills, values, and tools you are allowed to assign to agents. You MUST call this before designing or editing a team. You MUST NOT use any items outside what this tool returns.",
+  input_schema: {
+    type: "object" as const,
+    properties: {},
+    required: [],
+  },
+};
+
+const SPEC_SCHEMA = `{
   "name": "environment name",
   "objective": "the goal",
   "agents": [
@@ -27,58 +55,139 @@ Return ONLY valid JSON matching this schema:
       "id": "unique_snake_case_id",
       "role": "Agent Role Title",
       "personality": "2-3 personality traits",
-      "skills": ["skill1", "skill2"],
-      "values": ["value1", "value2"],
-      "tools": ["tool1", "tool2"],
-      "rules": ["rule1", "rule2"],
+      "skills": ["from get_available_resources only"],
+      "values": ["from get_available_resources only"],
+      "tools": ["from get_available_resources only"],
+      "rules": ["from get_available_resources only"],
       "memory": [],
       "dependsOn": ["other_agent_id or empty"]
     }
   ],
-  "rules": ["global rule 1"]
+  "rules": ["from get_available_resources only"]
+}`;
+
+const DESIGN_PROMPT = `You are an AI team architect. Given a task, design a team of specialized AI agents.
+
+CRITICAL: Before designing, you MUST call get_available_resources to see what skills, values, tools, and rules exist. You may ONLY assign items returned by that tool. Do NOT invent or fabricate any skills, values, tools, or rules.
+
+After calling the tool, return ONLY valid JSON matching this schema:
+${SPEC_SCHEMA}
+
+Design 2-4 agents. Make them diverse and specialized. Use dependsOn to create a logical workflow.`;
+
+const EDIT_PROMPT = `You are an AI team architect. The user wants to modify an existing team configuration.
+
+CRITICAL: Before editing, you MUST call get_available_resources to see what skills, values, tools, and rules are allowed. You may ONLY assign items returned by that tool. Do NOT invent any.
+
+Return ONLY the updated valid JSON EnvironmentSpec. Preserve agent IDs when possible.`;
+
+// Tool-use conversation loop: handles the tool call → result → final response cycle
+async function* toolUseConversation(
+  systemPrompt: string,
+  userContent: string,
+  bucketItems: BucketItem[],
+): AsyncGenerator<AgentEvent> {
+  const messages: Anthropic.MessageParam[] = [
+    { role: "user", content: userContent },
+  ];
+
+  // First call — Claude should call get_available_resources
+  const firstResponse = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 8000,
+    thinking: { type: "enabled", budget_tokens: 4000 },
+    system: systemPrompt,
+    tools: [RESOURCE_TOOL],
+    messages,
+  });
+
+  // Emit any thinking from first response
+  for (const block of firstResponse.content) {
+    if (block.type === "thinking") {
+      yield { type: "planner_thinking", content: block.thinking, timestamp: Date.now() };
+    }
+  }
+
+  // Check if it called the tool
+  const toolUseBlock = firstResponse.content.find(
+    (b): b is Anthropic.ContentBlock & { type: "tool_use" } => b.type === "tool_use",
+  );
+
+  if (toolUseBlock && toolUseBlock.name === "get_available_resources") {
+    // Return bucket items as tool result
+    const resources = formatBucketForTool(bucketItems);
+
+    messages.push({ role: "assistant", content: firstResponse.content });
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: toolUseBlock.id,
+          content: JSON.stringify(resources, null, 2),
+        },
+      ],
+    });
+
+    // Second call — Claude generates the spec using tool results, now with streaming
+    const stream = client.messages.stream({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8000,
+      thinking: { type: "enabled", budget_tokens: 4000 },
+      system: systemPrompt,
+      tools: [RESOURCE_TOOL],
+      messages,
+    });
+
+    let output = "";
+    for await (const event of stream) {
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "thinking_delta") {
+          yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
+        } else if (event.delta.type === "text_delta") {
+          output += event.delta.text;
+          yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
+        }
+      }
+    }
+
+    return output;
+  }
+
+  // If Claude didn't call the tool, use the text output directly (fallback)
+  let output = "";
+  for (const block of firstResponse.content) {
+    if (block.type === "text") {
+      output += block.text;
+      yield { type: "planner_output", content: block.text, timestamp: Date.now() };
+    }
+  }
+
+  return output;
 }
-
-Design 2-4 agents. Make them diverse and specialized. Each agent should have a clear, distinct role. Use dependsOn to create a logical workflow — some agents need output from others. Tools are conceptual (e.g., "web_search", "code_generation", "analysis", "writing").`;
-
-const EDIT_PROMPT = `You are an AI team architect. The user has an existing team configuration and wants to modify it.
-
-Given the current config and the user's request, return ONLY the updated valid JSON EnvironmentSpec. Keep the same schema. You may add, remove, or modify agents, change their skills/values/tools/rules, or update global rules. Preserve agent IDs when the agent still exists.`;
 
 // Design-only: creates the EnvironmentSpec without executing agents
 export async function* designTeam(
   task: string,
   bucketItems: BucketItem[],
 ): AsyncGenerator<AgentEvent> {
-  const bucketContext = buildBucketContext(bucketItems);
-  let systemPrompt = DESIGN_PROMPT;
-  if (bucketContext) {
-    systemPrompt += `\n\nThe user has configured these resources. You MUST only use items from this list for agent skills, values, tools, and rules. Do NOT invent new ones.\n${bucketContext}`;
-  }
-
-  const stream = client.messages.stream({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 8000,
-    thinking: { type: "enabled", budget_tokens: 4000 },
-    system: systemPrompt,
-    messages: [{ role: "user", content: task }],
-  });
-
   let output = "";
-  for await (const event of stream) {
-    if (event.type === "content_block_delta") {
-      if (event.delta.type === "thinking_delta") {
-        yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
-      } else if (event.delta.type === "text_delta") {
-        output += event.delta.text;
-        yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
-      }
+
+  const gen = toolUseConversation(DESIGN_PROMPT, task, bucketItems);
+  while (true) {
+    const result = await gen.next();
+    if (result.done) {
+      output = result.value as string;
+      break;
     }
+    yield result.value;
   }
 
   try {
     const jsonMatch = output.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON found in planner output");
-    const spec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
+    const rawSpec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
+    const spec = enforceAllowlist(rawSpec, bucketItems);
     yield { type: "env_created", spec, timestamp: Date.now() };
   } catch (e) {
     yield { type: "error", message: `Failed to parse spec: ${e}`, timestamp: Date.now() };
@@ -91,41 +200,24 @@ export async function* editSpec(
   userMessage: string,
   bucketItems: BucketItem[],
 ): AsyncGenerator<AgentEvent> {
-  const bucketContext = buildBucketContext(bucketItems);
-  let systemPrompt = EDIT_PROMPT;
-  if (bucketContext) {
-    systemPrompt += `\n\nAvailable resources (use ONLY these):\n${bucketContext}`;
-  }
-
-  const stream = client.messages.stream({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 8000,
-    thinking: { type: "enabled", budget_tokens: 4000 },
-    system: systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: `Current config:\n${JSON.stringify(currentSpec, null, 2)}\n\nUser request: ${userMessage}`,
-      },
-    ],
-  });
+  const content = `Current config:\n${JSON.stringify(currentSpec, null, 2)}\n\nUser request: ${userMessage}`;
 
   let output = "";
-  for await (const event of stream) {
-    if (event.type === "content_block_delta") {
-      if (event.delta.type === "thinking_delta") {
-        yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
-      } else if (event.delta.type === "text_delta") {
-        output += event.delta.text;
-        yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
-      }
+  const gen = toolUseConversation(EDIT_PROMPT, content, bucketItems);
+  while (true) {
+    const result = await gen.next();
+    if (result.done) {
+      output = result.value as string;
+      break;
     }
+    yield result.value;
   }
 
   try {
     const jsonMatch = output.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON found");
-    const spec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
+    const rawSpec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
+    const spec = enforceAllowlist(rawSpec, bucketItems);
     yield { type: "env_created", spec, timestamp: Date.now() };
   } catch (e) {
     yield { type: "error", message: `Edit parse error: ${e}`, timestamp: Date.now() };
@@ -198,12 +290,12 @@ export async function* executeAgents(
   yield { type: "environment_complete", summary: "All agents completed their tasks.", timestamp: Date.now() };
 }
 
-// Keep for optimize
+// Optimize via edit
 export async function* optimizeAgents(
   currentSpec: EnvironmentSpec,
   bucketItems: BucketItem[],
 ): AsyncGenerator<AgentEvent> {
-  yield* editSpec(currentSpec, "Optimize the distribution of skills, tools, values, and rules across agents for maximum effectiveness. Redistribute resources intelligently.", bucketItems);
+  yield* editSpec(currentSpec, "Optimize the distribution of skills, tools, values, and rules across agents for maximum effectiveness.", bucketItems);
 }
 
 function buildAgentPrompt(agent: AgentSpec, globalRules: string[], upstreamContext: string): string {
