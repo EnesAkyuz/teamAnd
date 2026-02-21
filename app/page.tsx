@@ -93,7 +93,7 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center gap-2 px-3 pt-3">
         <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-3 py-1.5 shadow-sm backdrop-blur-md">
           <span className="text-sm font-semibold tracking-tight">
-            agent<span className="text-primary">scope</span>
+            team<span className="text-primary">&</span>
           </span>
         </div>
 

@@ -37,7 +37,11 @@ async function streamSSE(
   const decoder = new TextDecoder();
   let buffer = "";
 
+  // Cancel reader when signal aborts
+  signal.addEventListener("abort", () => reader.cancel(), { once: true });
+
   while (true) {
+    if (signal.aborted) break;
     const { done, value } = await reader.read();
     if (done) break;
 

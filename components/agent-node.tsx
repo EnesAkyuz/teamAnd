@@ -50,10 +50,10 @@ export function AgentNodeComponent({ data }: NodeProps) {
           onDropBucketItem(spec.id, item.category, item.label);
         }}
         className={`
-          min-w-[210px] max-w-[270px] rounded-xl border bg-background/90 p-3 backdrop-blur-md transition-all duration-200
-          ${status === "active" ? "border-primary/40 shadow-md shadow-primary/5" : "border-border/60 shadow-sm"}
-          ${status === "complete" ? "border-status-done/30" : ""}
-          ${status === "pending" ? "opacity-60" : ""}
+          min-w-[210px] max-w-[270px] rounded-xl border p-3 backdrop-blur-md transition-all duration-300
+          ${status === "active" ? "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10" : ""}
+          ${status === "complete" ? "border-status-done/40 bg-status-done-bg/60 shadow-sm" : ""}
+          ${status === "pending" ? "border-border/60 bg-background/90 opacity-60 shadow-sm" : ""}
           ${selected ? "ring-2 ring-primary/30 ring-offset-1 ring-offset-background" : ""}
           ${isDropTarget ? "ring-2 ring-primary/50 border-primary/60 scale-[1.02]" : ""}
         `}

@@ -138,61 +138,77 @@ export function ChatPanel({
         </div>
       )}
 
-      {/* Input + action buttons */}
-      <div className="shrink-0 border-t border-border/40 p-2">
-        <div className="flex items-end gap-1.5">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={
-              isBusy
-                ? "Working..."
-                : hasSpec
-                  ? "Enter a prompt to run, or edit the config..."
-                  : "Describe the task..."
+      {/* Input area */}
+      <div className="shrink-0 border-t border-border/40 p-2 space-y-1.5">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={
+            isBusy
+              ? "Working..."
+              : hasSpec
+                ? "Type a prompt to run agents, or instructions to edit config..."
+                : "Describe the task to design a team..."
+          }
+          rows={expanded ? 3 : 2}
+          className="w-full resize-none rounded-lg border border-border/40 bg-background/50 px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && e.metaKey) {
+              if (hasSpec && input.trim()) {
+                // Default ⌘Enter = run with prompt when spec exists
+                const prompt = input.trim();
+                setInput("");
+                onExecute(prompt);
+              } else {
+                handleSubmit();
+              }
             }
-            rows={expanded ? 3 : 2}
-            className="flex-1 resize-none rounded-lg border border-border/40 bg-background/50 px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && e.metaKey) handleSubmit();
-            }}
-          />
-          <div className="flex flex-col gap-1">
-            {isBusy ? (
-              <Button size="icon-sm" variant="destructive" onClick={onStop}>
-                <Square className="h-3 w-3" />
-              </Button>
-            ) : (
+          }}
+        />
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5">
+          {isBusy ? (
+            <Button size="sm" variant="destructive" onClick={onStop} className="flex-1">
+              <Square className="h-3 w-3" /> Stop
+            </Button>
+          ) : !hasSpec ? (
+            // No spec yet — single design button
+            <Button size="sm" onClick={handleSubmit} disabled={!input.trim()} className="flex-1">
+              <Send className="h-3 w-3" /> Design Team
+            </Button>
+          ) : (
+            // Has spec — show edit + run buttons side by side
+            <>
               <Button
-                size="icon-sm"
-                variant={hasSpec ? "outline" : "default"}
+                size="sm"
+                variant="outline"
                 onClick={handleSubmit}
                 disabled={!input.trim()}
-                title={hasSpec ? "Edit config" : "Design team"}
+                className="flex-1"
               >
-                {hasSpec ? <Pencil className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+                <Pencil className="h-3 w-3" /> Edit Config
               </Button>
-            )}
-          </div>
-        </div>
-        <div className="mt-1.5 flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground/50">
-            {input.trim() ? "⌘ Enter" : ""}
-          </span>
-          {hasSpec && !isRunning && (
-            <Button
-              size="sm"
-              onClick={() => {
-                const prompt = input.trim();
-                if (prompt) setInput("");
-                onExecute(prompt || undefined);
-              }}
-              disabled={isDesigning}
-            >
-              <Play className="h-3 w-3" /> {input.trim() ? "Run with prompt" : "Run Agents"}
-            </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const prompt = input.trim();
+                  if (prompt) setInput("");
+                  onExecute(prompt || undefined);
+                }}
+                className="flex-1"
+              >
+                <Play className="h-3 w-3" /> {input.trim() ? "Run" : "Run Agents"}
+              </Button>
+            </>
           )}
         </div>
+
+        {input.trim() && (
+          <p className="text-[10px] text-muted-foreground/50">
+            ⌘ Enter to {hasSpec ? "run with prompt" : "design"}
+          </p>
+        )}
       </div>
     </div>
   );

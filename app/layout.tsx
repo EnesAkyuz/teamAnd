@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentScope",
-  description: "Watch AI build and run its own team",
+  title: "team&",
+  description: "AI designs and runs its own team",
 };
 
 export default function RootLayout({
