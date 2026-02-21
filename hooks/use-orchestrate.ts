@@ -311,6 +311,19 @@ export function useOrchestrate() {
     setIsComplete(false);
   }, []);
 
+  const reset = useCallback(() => {
+    abortRef.current?.abort();
+    setAgents(new Map());
+    setEvents([]);
+    setEnvSpec(null);
+    setIsDesigning(false);
+    setIsRunning(false);
+    setIsComplete(false);
+    setPlannerThinking("");
+    setPlannerOutput("");
+    setChatMessages([]);
+  }, []);
+
   const stop = useCallback(() => {
     abortRef.current?.abort();
     setIsDesigning(false);
@@ -329,6 +342,7 @@ export function useOrchestrate() {
     chatMessages,
     design,
     loadSpec,
+    reset,
     edit,
     execute,
     stop,

@@ -8,6 +8,7 @@ import {
   Loader2,
   Package,
   Plus,
+  Search,
   Shield,
   Sparkles,
   Star,
@@ -57,6 +58,9 @@ export function BucketPanel({
   isOptimizing,
 }: BucketPanelProps) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<BucketItem[]>([]);
+  const [searching, setSearching] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const totalCount =
@@ -65,13 +69,37 @@ export function BucketPanel({
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  // Search across all environments
+  const handleSearch = async (q: string) => {
+    setSearchQuery(q);
+    if (!q.trim()) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/bucket/search?q=${encodeURIComponent(q.trim())}`);
+      const data = await res.json();
+      setSearchResults(data.map((d: { id: string; category: string; label: string; content: string | null; created_at: string }) => ({
+        id: d.id,
+        category: d.category as BucketCategory,
+        label: d.label,
+        content: d.content,
+        createdAt: d.created_at,
+      })));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  // Import a search result into current environment
+  const handleImport = (item: BucketItem) => {
+    onAdd(item.category, item.label, item.content ?? undefined);
+    setSearchResults((prev) => prev.filter((r) => r.id !== item.id));
+  };
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -88,7 +116,7 @@ export function BucketPanel({
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-xl">
           <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-            <span className="text-xs font-medium">Environment Bucket</span>
+            <span className="text-xs font-medium">Bucket</span>
             <div className="flex-1" />
             {onOptimize && totalCount > 0 && (
               <Button variant="ghost" size="xs" onClick={onOptimize} disabled={isOptimizing} className="text-[10px]">
@@ -96,6 +124,37 @@ export function BucketPanel({
                 {isOptimizing ? "..." : "Optimize"}
               </Button>
             )}
+          </div>
+
+          {/* Search bar */}
+          <div className="border-b border-border/40 px-3 py-1.5">
+            <div className="flex items-center gap-1.5 rounded-md border border-border/40 bg-background px-2 py-1">
+              <Search className="h-3 w-3 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Search across all environments..."
+                className="flex-1 bg-transparent text-[11px] focus:outline-none placeholder:text-muted-foreground/50"
+              />
+            </div>
+            {searchResults.length > 0 && (
+              <div className="mt-1.5 max-h-24 overflow-y-auto space-y-0.5">
+                {searchResults.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleImport(item)}
+                    className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] hover:bg-muted/50"
+                  >
+                    <Plus className="h-2.5 w-2.5 text-primary" />
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">{item.category}</Badge>
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searching && <p className="mt-1 text-[10px] text-muted-foreground">Searching...</p>}
           </div>
 
           <div className="max-h-[50vh] overflow-y-auto">
@@ -134,28 +193,26 @@ function BucketSection({
   onDelete: (id: string) => void;
 }) {
   const [sectionOpen, setSectionOpen] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [genPrompt, setGenPrompt] = useState("");
+  const [inputOpen, setInputOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const Icon = section.icon;
 
-  const handleAdd = () => {
+  const handleDirectAdd = () => {
     if (!input.trim()) return;
     onAdd(input.trim());
     setInput("");
-    setAdding(false);
   };
 
   const handleGenerate = async () => {
-    if (!genPrompt.trim()) return;
+    if (!input.trim()) return;
     setGenerating(true);
     try {
       const res = await fetch("/api/bucket/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: section.key, prompt: genPrompt.trim() }),
+        body: JSON.stringify({ category: section.key, prompt: input.trim() }),
       });
       const data = await res.json();
       if (data.items) {
@@ -164,7 +221,7 @@ function BucketSection({
           content: i.content,
         })));
       }
-      setGenPrompt("");
+      setInput("");
     } catch (e) {
       console.error("Generate error:", e);
     } finally {
@@ -184,21 +241,9 @@ function BucketSection({
         {section.label}
         <span className="text-muted-foreground">({items.length})</span>
         <div className="flex-1" />
-        {section.canGenerate && (
-          <span
-            className="rounded p-0.5 text-primary hover:bg-primary/10"
-            onClick={(e) => { e.stopPropagation(); setAdding(false); setGenPrompt(""); setSectionOpen(true); }}
-            role="button"
-            tabIndex={0}
-            onKeyDown={() => {}}
-            title="Generate with AI"
-          >
-            <Sparkles className="h-3 w-3" />
-          </span>
-        )}
         <span
           className="rounded p-0.5 text-muted-foreground hover:bg-muted"
-          onClick={(e) => { e.stopPropagation(); setAdding(true); setSectionOpen(true); }}
+          onClick={(e) => { e.stopPropagation(); setInputOpen(true); setSectionOpen(true); }}
           role="button"
           tabIndex={0}
           onKeyDown={() => {}}
@@ -251,43 +296,40 @@ function BucketSection({
                 )}
               </div>
             ))}
-            {items.length === 0 && !adding && (
+            {items.length === 0 && !inputOpen && (
               <span className="text-[10px] text-muted-foreground/50">None yet</span>
             )}
           </div>
 
-          {/* Manual add */}
-          {adding && (
+          {/* Single input: Enter to add directly, Sparkles to AI-generate */}
+          {inputOpen && (
             <div className="mt-1.5 flex gap-1">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAdding(false); }}
-                placeholder={`Add ${section.label.toLowerCase().slice(0, -1)}...`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleDirectAdd();
+                  if (e.key === "Escape") { setInputOpen(false); setInput(""); }
+                }}
+                placeholder={section.canGenerate ? `Type to add or describe to generate...` : `Add ${section.label.toLowerCase().slice(0, -1)}...`}
                 className="flex-1 rounded-md border border-border/60 bg-background px-2 py-0.5 text-[11px] focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
                 autoFocus
               />
-              <Button size="xs" onClick={handleAdd} disabled={!input.trim()}>Add</Button>
-            </div>
-          )}
-
-          {/* AI generate */}
-          {section.canGenerate && genPrompt !== undefined && (
-            <div className="mt-1.5">
-              <div className="flex gap-1">
-                <input
-                  type="text"
-                  value={genPrompt}
-                  onChange={(e) => setGenPrompt(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleGenerate(); if (e.key === "Escape") setGenPrompt(""); }}
-                  placeholder={`Describe ${section.label.toLowerCase()} to generate...`}
-                  className="flex-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] placeholder:text-primary/40 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
-                />
-                <Button size="xs" onClick={handleGenerate} disabled={!genPrompt.trim() || generating}>
+              {section.canGenerate && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={handleGenerate}
+                  disabled={!input.trim() || generating}
+                  title="Generate with AI"
+                >
                   {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                 </Button>
-              </div>
+              )}
+              <Button size="xs" onClick={handleDirectAdd} disabled={!input.trim()}>
+                Add
+              </Button>
             </div>
           )}
         </div>

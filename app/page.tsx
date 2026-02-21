@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
 import { AgentDetail } from "@/components/agent-detail";
@@ -27,6 +27,13 @@ export default function Home() {
   const live = useOrchestrate();
   const replay = useReplay();
   const bucket = useBucket(env.activeEnvId);
+
+  // Reset canvas when environment changes
+  useEffect(() => {
+    live.reset();
+    setSelectedAgentId(null);
+    setMode("live");
+  }, [env.activeEnvId]);
 
   const activeAgents = mode === "live" ? live.agents : replay.agents;
   const activeEvents = mode === "live" ? live.events : replay.events;
