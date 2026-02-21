@@ -3,7 +3,6 @@ import type { AgentEvent, AgentSpec, BucketItem, EnvironmentSpec } from "./types
 
 const client = new Anthropic();
 
-// Hard enforcement: strip any items not in the bucket allowlist
 function enforceAllowlist(spec: EnvironmentSpec, bucketItems: BucketItem[]): EnvironmentSpec {
   if (bucketItems.length === 0) return spec;
 
@@ -39,7 +38,7 @@ function formatBucketForTool(bucketItems: BucketItem[]) {
 const RESOURCE_TOOL: Anthropic.Tool = {
   name: "get_available_resources",
   description:
-    "Fetch the environment's available resources. Returns the exact lists of rules, skills, values, and tools you are allowed to assign to agents. You MUST call this before designing or editing a team. You MUST NOT use any items outside what this tool returns.",
+    "Fetch the environment's available resources. Returns the exact lists of rules, skills, values, and tools you are allowed to assign. MUST be called before designing or editing. If lists are empty, use empty arrays.",
   input_schema: {
     type: "object" as const,
     properties: {},
@@ -55,90 +54,56 @@ const SPEC_SCHEMA = `{
       "id": "unique_snake_case_id",
       "role": "Agent Role Title",
       "personality": "2-3 personality traits",
-      "skills": ["from get_available_resources only"],
-      "values": ["from get_available_resources only"],
-      "tools": ["from get_available_resources only"],
-      "rules": ["from get_available_resources only"],
+      "skills": [],
+      "values": [],
+      "tools": [],
+      "rules": [],
       "memory": [],
       "dependsOn": ["other_agent_id or empty"]
     }
   ],
-  "rules": ["from get_available_resources only"]
+  "rules": []
 }`;
 
 const DESIGN_PROMPT = `You are an AI team architect. Given a task, design a team of specialized AI agents.
 
-IMPORTANT RULES:
-1. ALWAYS call get_available_resources first to check what's available.
-2. You MUST ALWAYS design agents regardless of whether resources are empty or not.
-3. If resources are empty, set skills, values, tools, and rules to empty arrays []. The agents still need roles, personalities, and dependsOn.
-4. If resources exist, ONLY use items from what the tool returned. Do NOT invent any.
-5. Agent roles and personalities are always your own design — be creative and specific to the task.
+RULES:
+1. ALWAYS call get_available_resources first.
+2. ALWAYS design the team regardless of whether resources are empty.
+3. If resources are empty, use empty arrays [] for skills, values, tools, rules.
+4. If resources exist, ONLY use items from the tool result. Never invent any.
+5. Agent roles, personalities, and dependsOn are always your creative design.
+6. You may create branching workflows where multiple agents run in parallel.
 
 After calling the tool, return ONLY valid JSON matching this schema:
 ${SPEC_SCHEMA}
 
-Design 2-4 agents. Make them diverse and specialized. Use dependsOn to create a logical workflow.`;
+Design 2-4 agents. Make them diverse and specialized. Use dependsOn for workflow.`;
 
-const EDIT_PROMPT = `You are an AI team architect. The user wants to modify an existing team configuration.
+const EDIT_PROMPT = `You are an AI team architect modifying an existing team.
 
-IMPORTANT RULES:
+RULES:
 1. ALWAYS call get_available_resources first.
-2. If resources exist, ONLY use items returned by the tool. Do NOT invent any.
-3. If resources are empty, use empty arrays [] for skills, values, tools, rules.
-4. You MUST ALWAYS return a valid updated spec. Never refuse.
+2. If resources exist, ONLY use items from the tool result.
+3. If resources are empty, use empty arrays [].
+4. ALWAYS return valid JSON. Never refuse.
 
 Return ONLY the updated valid JSON EnvironmentSpec. Preserve agent IDs when possible.`;
 
-// Tool-use conversation loop: handles the tool call → result → final response cycle
-async function* toolUseConversation(
+// Multi-turn tool-use conversation that always extracts text output
+async function* plannerCall(
   systemPrompt: string,
   userContent: string,
   bucketItems: BucketItem[],
-): AsyncGenerator<AgentEvent> {
+): AsyncGenerator<AgentEvent, string> {
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: userContent },
   ];
 
-  // First call — Claude should call get_available_resources
-  const firstResponse = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 8000,
-    thinking: { type: "enabled", budget_tokens: 4000 },
-    system: systemPrompt,
-    tools: [RESOURCE_TOOL],
-    messages,
-  });
+  let finalOutput = "";
+  const maxTurns = 3; // safety limit
 
-  // Emit any thinking from first response
-  for (const block of firstResponse.content) {
-    if (block.type === "thinking") {
-      yield { type: "planner_thinking", content: block.thinking, timestamp: Date.now() };
-    }
-  }
-
-  // Check if it called the tool
-  const toolUseBlock = firstResponse.content.find(
-    (b): b is Anthropic.ContentBlock & { type: "tool_use" } => b.type === "tool_use",
-  );
-
-  if (toolUseBlock && toolUseBlock.name === "get_available_resources") {
-    // Return bucket items as tool result
-    const resources = formatBucketForTool(bucketItems);
-
-    messages.push({ role: "assistant", content: firstResponse.content });
-    messages.push({
-      role: "user",
-      content: [
-        {
-          type: "tool_result",
-          tool_use_id: toolUseBlock.id,
-          content: JSON.stringify(resources, null, 2),
-        },
-      ],
-    });
-
-    // Second call — Claude generates the spec using tool results, now with streaming
+  for (let turn = 0; turn < maxTurns; turn++) {
     const stream = client.messages.stream({
       model: "claude-sonnet-4-20250514",
       max_tokens: 8000,
@@ -148,45 +113,74 @@ async function* toolUseConversation(
       messages,
     });
 
-    let output = "";
+    const assistantBlocks: Anthropic.ContentBlock[] = [];
+    let turnText = "";
+
     for await (const event of stream) {
       if (event.type === "content_block_delta") {
         if (event.delta.type === "thinking_delta") {
           yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
         } else if (event.delta.type === "text_delta") {
-          output += event.delta.text;
+          turnText += event.delta.text;
           yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
         }
       }
     }
 
-    return output;
-  }
+    // Get the full response to check for tool use
+    const finalMessage = await stream.finalMessage();
+    assistantBlocks.push(...finalMessage.content);
 
-  // If Claude didn't call the tool, use the text output directly (fallback)
-  let output = "";
-  for (const block of firstResponse.content) {
-    if (block.type === "text") {
-      output += block.text;
-      yield { type: "planner_output", content: block.text, timestamp: Date.now() };
+    // Check if there's a tool call
+    const toolUseBlock = finalMessage.content.find(
+      (b): b is Anthropic.ContentBlock & { type: "tool_use" } => b.type === "tool_use",
+    );
+
+    if (toolUseBlock && toolUseBlock.name === "get_available_resources") {
+      const resources = formatBucketForTool(bucketItems);
+
+      messages.push({ role: "assistant", content: finalMessage.content });
+      messages.push({
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: toolUseBlock.id,
+            content: JSON.stringify(resources, null, 2),
+          },
+        ],
+      });
+      // Continue to next turn — Claude will use tool results
+      continue;
     }
+
+    // No tool call — this is the final text response
+    finalOutput = turnText;
+
+    // Also collect any text from non-streamed blocks
+    if (!finalOutput) {
+      for (const block of finalMessage.content) {
+        if (block.type === "text") finalOutput += block.text;
+      }
+    }
+
+    break;
   }
 
-  return output;
+  return finalOutput;
 }
 
-// Design-only: creates the EnvironmentSpec without executing agents
 export async function* designTeam(
   task: string,
   bucketItems: BucketItem[],
 ): AsyncGenerator<AgentEvent> {
   let output = "";
 
-  const gen = toolUseConversation(DESIGN_PROMPT, task, bucketItems);
+  const gen = plannerCall(DESIGN_PROMPT, task, bucketItems);
   while (true) {
     const result = await gen.next();
     if (result.done) {
-      output = result.value as string;
+      output = (result.value as string) ?? "";
       break;
     }
     yield result.value;
@@ -203,7 +197,6 @@ export async function* designTeam(
   }
 }
 
-// Edit existing spec based on user message
 export async function* editSpec(
   currentSpec: EnvironmentSpec,
   userMessage: string,
@@ -212,11 +205,11 @@ export async function* editSpec(
   const content = `Current config:\n${JSON.stringify(currentSpec, null, 2)}\n\nUser request: ${userMessage}`;
 
   let output = "";
-  const gen = toolUseConversation(EDIT_PROMPT, content, bucketItems);
+  const gen = plannerCall(EDIT_PROMPT, content, bucketItems);
   while (true) {
     const result = await gen.next();
     if (result.done) {
-      output = result.value as string;
+      output = (result.value as string) ?? "";
       break;
     }
     yield result.value;
@@ -233,73 +226,160 @@ export async function* editSpec(
   }
 }
 
-// Execute agents from a given spec
+// Execute agents with parallel support for branching workflows
 export async function* executeAgents(
   spec: EnvironmentSpec,
 ): AsyncGenerator<AgentEvent> {
   const completed: Record<string, string> = {};
-  const agentOrder = topologicalSort(spec.agents);
+  const levels = getExecutionLevels(spec.agents);
 
-  for (const agent of agentOrder) {
-    yield { type: "agent_spawned", agent, timestamp: Date.now() };
+  for (const level of levels) {
+    // All agents in the same level can run in parallel
+    if (level.length === 1) {
+      // Single agent — run directly and yield events inline
+      yield* runAgent(level[0], spec, completed);
+    } else {
+      // Multiple agents — run in parallel, collect events, yield in order
+      const agentResults = await Promise.all(
+        level.map((agent) => collectAgentRun(agent, spec, completed)),
+      );
 
-    const upstreamContext = agent.dependsOn
-      .filter((id) => completed[id])
-      .map((id) => {
-        const upstream = spec.agents.find((a) => a.id === id);
-        return `[${upstream?.role ?? id}]: ${completed[id]}`;
-      })
-      .join("\n\n");
-
-    const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext);
-
-    const stream = client.messages.stream({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 16000,
-      thinking: { type: "enabled", budget_tokens: 8000 },
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: `Task: ${spec.objective}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
-        },
-      ],
-    });
-
-    let fullOutput = "";
-
-    for await (const event of stream) {
-      if (event.type === "content_block_delta") {
-        if (event.delta.type === "thinking_delta") {
-          yield { type: "thinking", agentId: agent.id, content: event.delta.thinking, timestamp: Date.now() };
-        } else if (event.delta.type === "text_delta") {
-          fullOutput += event.delta.text;
-          yield { type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() };
+      // Yield all collected events and update completed map
+      for (const { agent, events, output } of agentResults) {
+        for (const event of events) {
+          yield event;
         }
+        completed[agent.id] = output;
       }
     }
-
-    completed[agent.id] = fullOutput;
-
-    for (const other of spec.agents) {
-      if (other.dependsOn.includes(agent.id)) {
-        yield {
-          type: "message",
-          from: agent.id,
-          to: other.id,
-          summary: fullOutput.slice(0, 150) + (fullOutput.length > 150 ? "..." : ""),
-          timestamp: Date.now(),
-        };
-      }
-    }
-
-    yield { type: "agent_complete", agentId: agent.id, result: fullOutput, timestamp: Date.now() };
   }
 
   yield { type: "environment_complete", summary: "All agents completed their tasks.", timestamp: Date.now() };
 }
 
-// Optimize via edit
+// Run a single agent, yielding events as they stream
+async function* runAgent(
+  agent: AgentSpec,
+  spec: EnvironmentSpec,
+  completed: Record<string, string>,
+): AsyncGenerator<AgentEvent> {
+  yield { type: "agent_spawned", agent, timestamp: Date.now() };
+
+  const upstreamContext = agent.dependsOn
+    .filter((id) => completed[id])
+    .map((id) => {
+      const upstream = spec.agents.find((a) => a.id === id);
+      return `[${upstream?.role ?? id}]: ${completed[id]}`;
+    })
+    .join("\n\n");
+
+  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext);
+
+  const stream = client.messages.stream({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 16000,
+    thinking: { type: "enabled", budget_tokens: 8000 },
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: `Task: ${spec.objective}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
+      },
+    ],
+  });
+
+  let fullOutput = "";
+
+  for await (const event of stream) {
+    if (event.type === "content_block_delta") {
+      if (event.delta.type === "thinking_delta") {
+        yield { type: "thinking", agentId: agent.id, content: event.delta.thinking, timestamp: Date.now() };
+      } else if (event.delta.type === "text_delta") {
+        fullOutput += event.delta.text;
+        yield { type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() };
+      }
+    }
+  }
+
+  completed[agent.id] = fullOutput;
+
+  for (const other of spec.agents) {
+    if (other.dependsOn.includes(agent.id)) {
+      yield {
+        type: "message",
+        from: agent.id,
+        to: other.id,
+        summary: fullOutput.slice(0, 150) + (fullOutput.length > 150 ? "..." : ""),
+        timestamp: Date.now(),
+      };
+    }
+  }
+
+  yield { type: "agent_complete", agentId: agent.id, result: fullOutput, timestamp: Date.now() };
+}
+
+// Run agent and collect all events (for parallel execution)
+async function collectAgentRun(
+  agent: AgentSpec,
+  spec: EnvironmentSpec,
+  completed: Record<string, string>,
+): Promise<{ agent: AgentSpec; events: AgentEvent[]; output: string }> {
+  const events: AgentEvent[] = [];
+  let output = "";
+
+  events.push({ type: "agent_spawned", agent, timestamp: Date.now() });
+
+  const upstreamContext = agent.dependsOn
+    .filter((id) => completed[id])
+    .map((id) => {
+      const upstream = spec.agents.find((a) => a.id === id);
+      return `[${upstream?.role ?? id}]: ${completed[id]}`;
+    })
+    .join("\n\n");
+
+  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext);
+
+  const stream = client.messages.stream({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 16000,
+    thinking: { type: "enabled", budget_tokens: 8000 },
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: `Task: ${spec.objective}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
+      },
+    ],
+  });
+
+  for await (const event of stream) {
+    if (event.type === "content_block_delta") {
+      if (event.delta.type === "thinking_delta") {
+        events.push({ type: "thinking", agentId: agent.id, content: event.delta.thinking, timestamp: Date.now() });
+      } else if (event.delta.type === "text_delta") {
+        output += event.delta.text;
+        events.push({ type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() });
+      }
+    }
+  }
+
+  for (const other of spec.agents) {
+    if (other.dependsOn.includes(agent.id)) {
+      events.push({
+        type: "message",
+        from: agent.id,
+        to: other.id,
+        summary: output.slice(0, 150) + (output.length > 150 ? "..." : ""),
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  events.push({ type: "agent_complete", agentId: agent.id, result: output, timestamp: Date.now() });
+
+  return { agent, events, output };
+}
+
 export async function* optimizeAgents(
   currentSpec: EnvironmentSpec,
   bucketItems: BucketItem[],
@@ -308,39 +388,48 @@ export async function* optimizeAgents(
 }
 
 function buildAgentPrompt(agent: AgentSpec, globalRules: string[], upstreamContext: string): string {
-  return `You are ${agent.role}.
+  const allRules = [...agent.rules, ...globalRules];
+  const parts = [`You are ${agent.role}.`, `Personality: ${agent.personality}`];
 
-Personality: ${agent.personality}
-Skills: ${agent.skills.join(", ")}
-Values: ${agent.values.join(", ")}
-Available Tools: ${agent.tools.join(", ")}
+  if (agent.skills.length > 0) parts.push(`Skills: ${agent.skills.join(", ")}`);
+  if (agent.values.length > 0) parts.push(`Values: ${agent.values.join(", ")}`);
+  if (agent.tools.length > 0) parts.push(`Available Tools: ${agent.tools.join(", ")}`);
+  if (allRules.length > 0) parts.push(`Rules you MUST follow:\n${allRules.map((r) => `- ${r}`).join("\n")}`);
+  if (agent.memory.length > 0) parts.push(`Memory/Context:\n${agent.memory.join("\n")}`);
 
-Rules you MUST follow:
-${[...agent.rules, ...globalRules].map((r) => `- ${r}`).join("\n")}
+  parts.push("You are part of a team. Stay focused on YOUR role. Be concise but thorough. Output your work directly.");
 
-${agent.memory.length > 0 ? `Memory/Context:\n${agent.memory.join("\n")}` : ""}
-
-You are part of a team. Stay focused on YOUR role. Be concise but thorough. Output your work directly.`;
+  return parts.join("\n\n");
 }
 
-function topologicalSort(agents: AgentSpec[]): AgentSpec[] {
-  const sorted: AgentSpec[] = [];
-  const visited = new Set<string>();
+// Group agents into execution levels — agents at the same level can run in parallel
+function getExecutionLevels(agents: AgentSpec[]): AgentSpec[][] {
+  const depths: Record<string, number> = {};
 
-  function visit(id: string) {
-    if (visited.has(id)) return;
-    visited.add(id);
+  function getDepth(id: string): number {
+    if (depths[id] !== undefined) return depths[id];
     const agent = agents.find((a) => a.id === id);
-    if (!agent) return;
-    for (const dep of agent.dependsOn) {
-      visit(dep);
+    if (!agent || agent.dependsOn.length === 0) {
+      depths[id] = 0;
+      return 0;
     }
-    sorted.push(agent);
+    depths[id] = 1 + Math.max(...agent.dependsOn.map(getDepth));
+    return depths[id];
   }
 
+  for (const agent of agents) getDepth(agent.id);
+
+  // Group by depth
+  const levelMap: Record<number, AgentSpec[]> = {};
   for (const agent of agents) {
-    visit(agent.id);
+    const d = depths[agent.id] ?? 0;
+    if (!levelMap[d]) levelMap[d] = [];
+    levelMap[d].push(agent);
   }
 
-  return sorted;
+  // Return sorted by depth (0 first = roots, then their dependents)
+  return Object.keys(levelMap)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((d) => levelMap[d]);
 }
