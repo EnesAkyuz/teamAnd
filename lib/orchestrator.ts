@@ -33,7 +33,7 @@ export async function* orchestrate(
   // Step 1: Generate environment spec with streaming so user sees planner thinking
   const plannerStream = client.messages.stream({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 2000,
+    max_tokens: 8000,
     thinking: { type: "enabled", budget_tokens: 4000 },
     system: PLANNER_PROMPT,
     messages: [{ role: "user", content: task }],
@@ -98,8 +98,8 @@ export async function* orchestrate(
 
     const stream = client.messages.stream({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      thinking: { type: "enabled", budget_tokens: 5000 },
+      max_tokens: 16000,
+      thinking: { type: "enabled", budget_tokens: 8000 },
       system: systemPrompt,
       messages: [
         {
