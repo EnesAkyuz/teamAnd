@@ -3,6 +3,33 @@ import type { AgentEvent, AgentSpec, BucketItem, EnvironmentSpec } from "./types
 
 const client = new Anthropic();
 
+// Pre-available tools that map to real Claude API server-side tools
+// These are the tools that can be added to the bucket and assigned to agents
+export const AVAILABLE_TOOLS: Record<string, { description: string; tool: Anthropic.Tool }> = {
+  web_search: {
+    description: "Search the web for current information, news, and data",
+    tool: {
+      type: "web_search_20250305",
+      name: "web_search",
+      max_uses: 5,
+    } as unknown as Anthropic.Tool,
+  },
+  code_execution: {
+    description: "Execute Python code in a sandboxed environment to compute, analyze, or generate",
+    tool: {
+      type: "code_execution_20250522",
+      name: "code_execution",
+    } as unknown as Anthropic.Tool,
+  },
+};
+
+// Resolve agent's tool labels to actual Claude API tool definitions
+function resolveTools(toolLabels: string[]): Anthropic.Tool[] {
+  return toolLabels
+    .filter((label) => AVAILABLE_TOOLS[label])
+    .map((label) => AVAILABLE_TOOLS[label].tool);
+}
+
 function enforceAllowlist(spec: EnvironmentSpec, bucketItems: BucketItem[]): EnvironmentSpec {
   if (bucketItems.length === 0) return spec;
 
@@ -285,8 +312,9 @@ async function* runAgent(
     .join("\n\n");
 
   const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext, skillContent);
+  const tools = resolveTools(agent.tools);
 
-  const stream = client.messages.stream({
+  const streamOpts: Record<string, unknown> = {
     model: "claude-sonnet-4-20250514",
     max_tokens: 16000,
     thinking: { type: "enabled", budget_tokens: 8000 },
@@ -297,7 +325,12 @@ async function* runAgent(
         content: `Task: ${spec.objective}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
       },
     ],
-  });
+  };
+  if (tools.length > 0) {
+    streamOpts.tools = tools;
+  }
+
+  const stream = client.messages.stream(streamOpts as Parameters<typeof client.messages.stream>[0]);
 
   let fullOutput = "";
 
@@ -309,6 +342,16 @@ async function* runAgent(
         fullOutput += event.delta.text;
         yield { type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() };
       }
+    }
+    // Emit tool_call events for visibility
+    if (event.type === "content_block_start" && (event as unknown as { content_block: { type: string; name: string } }).content_block.type === "server_tool_use") {
+      yield {
+        type: "tool_call",
+        agentId: agent.id,
+        tool: (event as unknown as { content_block: { name: string } }).content_block.name,
+        input: "",
+        timestamp: Date.now(),
+      };
     }
   }
 
@@ -350,8 +393,9 @@ async function collectAgentRun(
     .join("\n\n");
 
   const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext, skillContent);
+  const tools = resolveTools(agent.tools);
 
-  const stream = client.messages.stream({
+  const streamOpts: Record<string, unknown> = {
     model: "claude-sonnet-4-20250514",
     max_tokens: 16000,
     thinking: { type: "enabled", budget_tokens: 8000 },
@@ -362,7 +406,12 @@ async function collectAgentRun(
         content: `Task: ${spec.objective}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
       },
     ],
-  });
+  };
+  if (tools.length > 0) {
+    streamOpts.tools = tools;
+  }
+
+  const stream = client.messages.stream(streamOpts as Parameters<typeof client.messages.stream>[0]);
 
   for await (const event of stream) {
     if (event.type === "content_block_delta") {
@@ -372,6 +421,15 @@ async function collectAgentRun(
         output += event.delta.text;
         events.push({ type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() });
       }
+    }
+    if (event.type === "content_block_start" && (event as unknown as { content_block: { type: string; name: string } }).content_block.type === "server_tool_use") {
+      events.push({
+        type: "tool_call",
+        agentId: agent.id,
+        tool: (event as unknown as { content_block: { name: string } }).content_block.name,
+        input: "",
+        timestamp: Date.now(),
+      });
     }
   }
 

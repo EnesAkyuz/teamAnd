@@ -25,12 +25,14 @@ export function useBucket() {
   const [items, setItems] = useState<BucketItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchItems = useCallback(() => {
     fetch("/api/bucket")
       .then((r) => r.json())
       .then((data: RawBucketItem[]) => setItems(data.map(mapItem)))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const addItem = useCallback(async (category: BucketCategory, label: string, content?: string) => {
     const res = await fetch("/api/bucket", {
@@ -83,5 +85,5 @@ export function useBucket() {
     [items],
   );
 
-  return { items, grouped, loading, addItem, addItems, updateItem, deleteItem };
+  return { items, grouped, loading, addItem, addItems, updateItem, deleteItem, refetch: fetchItems };
 }
