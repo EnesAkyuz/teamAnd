@@ -34,7 +34,7 @@ interface ChatPanelProps {
   hasSpec: boolean;
   onDesign: (message: string) => void;
   onEdit: (message: string) => void;
-  onExecute: () => void;
+  onExecute: (prompt?: string) => void;
   onStop: () => void;
 }
 
@@ -148,7 +148,7 @@ export function ChatPanel({
               isBusy
                 ? "Working..."
                 : hasSpec
-                  ? "Edit the team config..."
+                  ? "Enter a prompt to run, or edit the config..."
                   : "Describe the task..."
             }
             rows={expanded ? 3 : 2}
@@ -180,8 +180,16 @@ export function ChatPanel({
             {input.trim() ? "⌘ Enter" : ""}
           </span>
           {hasSpec && !isRunning && (
-            <Button size="sm" onClick={onExecute} disabled={isDesigning}>
-              <Play className="h-3 w-3" /> Run Agents
+            <Button
+              size="sm"
+              onClick={() => {
+                const prompt = input.trim();
+                if (prompt) setInput("");
+                onExecute(prompt || undefined);
+              }}
+              disabled={isDesigning}
+            >
+              <Play className="h-3 w-3" /> {input.trim() ? "Run with prompt" : "Run Agents"}
             </Button>
           )}
         </div>

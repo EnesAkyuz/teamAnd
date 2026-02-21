@@ -170,7 +170,7 @@ export default function Home() {
               hasSpec={!!live.envSpec}
               onDesign={(msg) => live.design(msg, bucket.items)}
               onEdit={(msg) => live.edit(msg, bucket.items)}
-              onExecute={() => live.execute(bucket.items)}
+              onExecute={(prompt) => live.execute(bucket.items, prompt)}
               onStop={live.stop}
             />
           </DraggablePanel>

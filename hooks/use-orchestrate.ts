@@ -226,7 +226,7 @@ export function useOrchestrate() {
   }, [envSpec, processEvent]);
 
   // Execute the current spec (run agents)
-  const execute = useCallback(async (bucketItems?: BucketItem[]) => {
+  const execute = useCallback(async (bucketItems?: BucketItem[], prompt?: string) => {
     if (!envSpec) return;
 
     // Reset agent states but keep spec
@@ -247,7 +247,7 @@ export function useOrchestrate() {
 
     try {
       await streamSSE(
-        { action: "execute", spec: envSpec, bucketItems },
+        { action: "execute", spec: envSpec, bucketItems, prompt },
         abort.signal,
         processEvent,
       );

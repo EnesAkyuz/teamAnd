@@ -260,6 +260,7 @@ export async function* editSpec(
 export async function* executeAgents(
   spec: EnvironmentSpec,
   bucketItems?: BucketItem[],
+  userPrompt?: string,
 ): AsyncGenerator<AgentEvent> {
   // Build skill content lookup
   const skillContent: Record<string, string> = {};
@@ -276,10 +277,10 @@ export async function* executeAgents(
 
   for (const level of levels) {
     if (level.length === 1) {
-      yield* runAgent(level[0], spec, completed, skillContent);
+      yield* runAgent(level[0], spec, completed, skillContent, userPrompt);
     } else {
       const agentResults = await Promise.all(
-        level.map((agent) => collectAgentRun(agent, spec, completed, skillContent)),
+        level.map((agent) => collectAgentRun(agent, spec, completed, skillContent, userPrompt)),
       );
 
       for (const { agent, events, output } of agentResults) {
@@ -300,6 +301,7 @@ async function* runAgent(
   spec: EnvironmentSpec,
   completed: Record<string, string>,
   skillContent: Record<string, string> = {},
+  userPrompt?: string,
 ): AsyncGenerator<AgentEvent> {
   yield { type: "agent_spawned", agent, timestamp: Date.now() };
 
@@ -322,7 +324,7 @@ async function* runAgent(
     messages: [
       {
         role: "user",
-        content: `Task: ${spec.objective}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
+        content: `Task: ${spec.objective}${userPrompt ? `\n\nUser prompt: ${userPrompt}` : ""}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
       },
     ],
   };
@@ -378,6 +380,7 @@ async function collectAgentRun(
   spec: EnvironmentSpec,
   completed: Record<string, string>,
   skillContent: Record<string, string> = {},
+  userPrompt?: string,
 ): Promise<{ agent: AgentSpec; events: AgentEvent[]; output: string }> {
   const events: AgentEvent[] = [];
   let output = "";
@@ -403,7 +406,7 @@ async function collectAgentRun(
     messages: [
       {
         role: "user",
-        content: `Task: ${spec.objective}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
+        content: `Task: ${spec.objective}${userPrompt ? `\n\nUser prompt: ${userPrompt}` : ""}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
       },
     ],
   };
