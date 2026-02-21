@@ -68,7 +68,12 @@ const SPEC_SCHEMA = `{
 
 const DESIGN_PROMPT = `You are an AI team architect. Given a task, design a team of specialized AI agents.
 
-CRITICAL: Before designing, you MUST call get_available_resources to see what skills, values, tools, and rules exist. You may ONLY assign items returned by that tool. Do NOT invent or fabricate any skills, values, tools, or rules.
+IMPORTANT RULES:
+1. ALWAYS call get_available_resources first to check what's available.
+2. You MUST ALWAYS design agents regardless of whether resources are empty or not.
+3. If resources are empty, set skills, values, tools, and rules to empty arrays []. The agents still need roles, personalities, and dependsOn.
+4. If resources exist, ONLY use items from what the tool returned. Do NOT invent any.
+5. Agent roles and personalities are always your own design — be creative and specific to the task.
 
 After calling the tool, return ONLY valid JSON matching this schema:
 ${SPEC_SCHEMA}
@@ -77,7 +82,11 @@ Design 2-4 agents. Make them diverse and specialized. Use dependsOn to create a 
 
 const EDIT_PROMPT = `You are an AI team architect. The user wants to modify an existing team configuration.
 
-CRITICAL: Before editing, you MUST call get_available_resources to see what skills, values, tools, and rules are allowed. You may ONLY assign items returned by that tool. Do NOT invent any.
+IMPORTANT RULES:
+1. ALWAYS call get_available_resources first.
+2. If resources exist, ONLY use items returned by the tool. Do NOT invent any.
+3. If resources are empty, use empty arrays [] for skills, values, tools, rules.
+4. You MUST ALWAYS return a valid updated spec. Never refuse.
 
 Return ONLY the updated valid JSON EnvironmentSpec. Preserve agent IDs when possible.`;
 
