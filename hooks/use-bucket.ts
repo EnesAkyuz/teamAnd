@@ -21,21 +21,24 @@ function mapItem(d: RawBucketItem): BucketItem {
   };
 }
 
-export function useBucket() {
+export function useBucket(environmentId: string | null) {
   const [items, setItems] = useState<BucketItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchItems = useCallback(() => {
-    fetch("/api/bucket")
+    if (!environmentId) { setItems([]); setLoading(false); return; }
+    setLoading(true);
+    fetch(`/api/environments/${environmentId}/bucket`)
       .then((r) => r.json())
       .then((data: RawBucketItem[]) => setItems(data.map(mapItem)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [environmentId]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const addItem = useCallback(async (category: BucketCategory, label: string, content?: string) => {
-    const res = await fetch("/api/bucket", {
+    if (!environmentId) return null;
+    const res = await fetch(`/api/environments/${environmentId}/bucket`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ category, label, content: content ?? null }),
@@ -45,12 +48,13 @@ export function useBucket() {
       setItems((prev) => [...prev, mapItem(data)]);
     }
     return data;
-  }, []);
+  }, [environmentId]);
 
   const addItems = useCallback(async (newItems: { category: BucketCategory; label: string; content?: string }[]) => {
+    if (!environmentId) return;
     const results = await Promise.all(
       newItems.map((item) =>
-        fetch("/api/bucket", {
+        fetch(`/api/environments/${environmentId}/bucket`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ category: item.category, label: item.label, content: item.content ?? null }),
@@ -59,7 +63,7 @@ export function useBucket() {
     );
     const created = results.filter((d) => d.id).map(mapItem);
     setItems((prev) => [...prev, ...created]);
-  }, []);
+  }, [environmentId]);
 
   const updateItem = useCallback(async (id: string, label: string) => {
     await fetch(`/api/bucket/${id}`, {

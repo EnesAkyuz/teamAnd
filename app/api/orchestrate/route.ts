@@ -5,22 +5,21 @@ import type { Json } from "@/lib/database.types";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const { action, task, spec, bucketItems, prompt } = await request.json();
-
-  // Create session for new designs
-  let sessionId: string | undefined;
-  if (action === "design" || action === "execute") {
-    const { data: session } = await supabase
-      .from("sessions")
-      .insert({ task: task ?? spec?.objective ?? "run" })
-      .select("id")
-      .single();
-    sessionId = session?.id;
-  }
+  const { action, task, spec, bucketItems, prompt, configId } = await request.json();
 
   const encoder = new TextEncoder();
 
-  // Pick the right generator based on action
+  // Create a run record for execute actions
+  let runId: string | undefined;
+  if (action === "execute" && configId) {
+    const { data: run } = await supabase
+      .from("runs")
+      .insert({ config_id: configId, prompt: prompt ?? null, status: "running" })
+      .select("id")
+      .single();
+    runId = run?.id;
+  }
+
   function getGenerator() {
     switch (action) {
       case "design":
@@ -41,42 +40,45 @@ export async function POST(request: Request) {
           const data = `data: ${JSON.stringify(event)}\n\n`;
           controller.enqueue(encoder.encode(data));
 
-          // Fire-and-forget DB writes
-          if (sessionId) {
+          // Write events to run if executing
+          if (runId) {
             supabase
               .from("events")
               .insert({
-                session_id: sessionId,
+                run_id: runId,
+                session_id: null,
                 timestamp_ms: event.timestamp,
                 event_type: event.type,
                 agent_id: "agentId" in event ? event.agentId : null,
                 payload: event as unknown as Json,
               })
               .then();
-
-            if (event.type === "env_created") {
-              supabase
-                .from("sessions")
-                .update({ environment_spec: event.spec as unknown as Json })
-                .eq("id", sessionId)
-                .then();
-            }
           }
+        }
+
+        // Mark run as complete
+        if (runId) {
+          supabase.from("runs").update({ status: "complete" }).eq("id", runId).then();
         }
       } catch (error) {
         const errEvent = `data: ${JSON.stringify({ type: "error", message: String(error), timestamp: Date.now() })}\n\n`;
         controller.enqueue(encoder.encode(errEvent));
+        if (runId) {
+          supabase.from("runs").update({ status: "stopped" }).eq("id", runId).then();
+        }
       } finally {
         controller.close();
       }
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+  // Send runId in a custom header so frontend knows
+  const headers: Record<string, string> = {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  };
+  if (runId) headers["X-Run-Id"] = runId;
+
+  return new Response(stream, { headers });
 }

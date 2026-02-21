@@ -30,7 +30,7 @@ export function useReplay() {
     for (const t of timeoutsRef.current) clearTimeout(t);
     timeoutsRef.current = [];
 
-    const res = await fetch(`/api/sessions/${sessionId}/events`);
+    const res = await fetch(`/api/runs/${sessionId}/events`);
     const rawEvents: Array<{ payload: AgentEvent; timestamp_ms: number }> =
       await res.json();
 

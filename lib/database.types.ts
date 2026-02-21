@@ -39,6 +39,7 @@ export type Database = {
           category: string
           content: string | null
           created_at: string | null
+          environment_id: string | null
           id: string
           label: string
         }
@@ -46,6 +47,7 @@ export type Database = {
           category: string
           content?: string | null
           created_at?: string | null
+          environment_id?: string | null
           id?: string
           label: string
         }
@@ -53,8 +55,70 @@ export type Database = {
           category?: string
           content?: string | null
           created_at?: string | null
+          environment_id?: string | null
           id?: string
           label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bucket_items_environment_id_fkey"
+            columns: ["environment_id"]
+            isOneToOne: false
+            referencedRelation: "environments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configs: {
+        Row: {
+          created_at: string | null
+          environment_id: string | null
+          id: string
+          name: string
+          spec: Json
+        }
+        Insert: {
+          created_at?: string | null
+          environment_id?: string | null
+          id?: string
+          name: string
+          spec: Json
+        }
+        Update: {
+          created_at?: string | null
+          environment_id?: string | null
+          id?: string
+          name?: string
+          spec?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configs_environment_id_fkey"
+            columns: ["environment_id"]
+            isOneToOne: false
+            referencedRelation: "environments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      environments: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -65,6 +129,7 @@ export type Database = {
           event_type: string
           id: string
           payload: Json
+          run_id: string | null
           session_id: string | null
           timestamp_ms: number
         }
@@ -74,6 +139,7 @@ export type Database = {
           event_type: string
           id?: string
           payload: Json
+          run_id?: string | null
           session_id?: string | null
           timestamp_ms: number
         }
@@ -83,15 +149,55 @@ export type Database = {
           event_type?: string
           id?: string
           payload?: Json
+          run_id?: string | null
           session_id?: string | null
           timestamp_ms?: number
         }
         Relationships: [
           {
+            foreignKeyName: "events_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "events_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      runs: {
+        Row: {
+          config_id: string | null
+          created_at: string | null
+          id: string
+          prompt: string | null
+          status: string
+        }
+        Insert: {
+          config_id?: string | null
+          created_at?: string | null
+          id?: string
+          prompt?: string | null
+          status?: string
+        }
+        Update: {
+          config_id?: string | null
+          created_at?: string | null
+          id?: string
+          prompt?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "runs_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "configs"
             referencedColumns: ["id"]
           },
         ]

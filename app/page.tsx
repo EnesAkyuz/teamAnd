@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { RotateCcw, X } from "lucide-react";
+import { X } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
 import { AgentDetail } from "@/components/agent-detail";
 import { EventLog } from "@/components/event-log";
 import { ChatPanel } from "@/components/chat-panel";
 import { BucketPanel } from "@/components/bucket-panel";
+import { EnvSwitcher } from "@/components/env-switcher";
 import { DraggablePanel } from "@/components/draggable-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { useOrchestrate } from "@/hooks/use-orchestrate";
 import { useReplay } from "@/hooks/use-replay";
 import { useBucket } from "@/hooks/use-bucket";
+import { useEnvironments } from "@/hooks/use-environments";
 import type { BucketCategory } from "@/lib/types";
 
 export default function Home() {
@@ -21,9 +23,10 @@ export default function Home() {
   const [mode, setMode] = useState<"live" | "replay">("live");
   const [isOptimizing, setIsOptimizing] = useState(false);
 
+  const env = useEnvironments();
   const live = useOrchestrate();
   const replay = useReplay();
-  const bucket = useBucket();
+  const bucket = useBucket(env.activeEnvId);
 
   const activeAgents = mode === "live" ? live.agents : replay.agents;
   const activeEvents = mode === "live" ? live.events : replay.events;
@@ -59,7 +62,6 @@ export default function Home() {
     if (!live.envSpec || bucket.items.length === 0) return;
     setIsOptimizing(true);
     try {
-      // Use the edit flow to optimize
       await live.edit(
         "Optimize the distribution of skills, tools, values, and rules across agents for maximum effectiveness.",
         bucket.items,
@@ -68,6 +70,11 @@ export default function Home() {
       setIsOptimizing(false);
     }
   }, [live.envSpec, bucket.items, live.edit]);
+
+  const handleReplayRun = useCallback(async (runId: string) => {
+    setMode("replay");
+    replay.replay(runId);
+  }, [replay]);
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
@@ -83,7 +90,11 @@ export default function Home() {
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-muted-foreground">
-              {live.isDesigning ? "" : "Enter a task to design your agent team."}
+              {live.isDesigning
+                ? ""
+                : env.activeEnv
+                  ? "Enter a task to design your agent team."
+                  : "Create an environment to get started."}
             </p>
           </div>
         )}
@@ -97,23 +108,51 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Bucket dropdown */}
+        {/* Environment + Config + Run switcher */}
         <div className="pointer-events-auto">
-          <BucketPanel
-            grouped={bucket.grouped}
-            loading={bucket.loading}
-            onAdd={bucket.addItem}
-            onAddItems={bucket.addItems}
-            onDelete={bucket.deleteItem}
-            onOptimize={live.envSpec ? handleOptimize : undefined}
-            isOptimizing={isOptimizing}
-            onSeedTools={async () => {
-              await fetch("/api/bucket/seed-tools", { method: "POST" });
-              // Refetch all items to sync
-              bucket.refetch();
+          <EnvSwitcher
+            environments={env.environments}
+            activeEnv={env.activeEnv}
+            onSelectEnv={env.setActiveEnvId}
+            onCreateEnv={env.createEnvironment}
+            onDeleteEnv={env.deleteEnvironment}
+            configs={env.configs}
+            activeConfig={env.activeConfig}
+            onSelectConfig={env.setActiveConfigId}
+            onSaveConfig={(name) => {
+              if (live.envSpec) {
+                env.saveConfig(name, live.envSpec);
+              }
             }}
+            onDeleteConfig={env.deleteConfig}
+            onLoadConfig={(spec) => {
+              live.loadSpec(spec);
+              setMode("live");
+            }}
+            hasSpec={!!live.envSpec}
+            runs={env.runs}
+            onReplayRun={handleReplayRun}
           />
         </div>
+
+        {/* Bucket */}
+        {env.activeEnvId && (
+          <div className="pointer-events-auto">
+            <BucketPanel
+              grouped={bucket.grouped}
+              loading={bucket.loading}
+              onAdd={bucket.addItem}
+              onAddItems={bucket.addItems}
+              onDelete={bucket.deleteItem}
+              onOptimize={live.envSpec ? handleOptimize : undefined}
+              isOptimizing={isOptimizing}
+              onSeedTools={async () => {
+                await fetch("/api/bucket/seed-tools", { method: "POST" });
+                bucket.refetch();
+              }}
+            />
+          </div>
+        )}
 
         {activeEnvSpec && (
           <Badge
@@ -136,46 +175,64 @@ export default function Home() {
         {live.isComplete && (
           <Badge
             variant="secondary"
-            className="pointer-events-auto border border-status-done/30 bg-status-done-bg/80 text-[11px] text-status-done backdrop-blur-md"
+            className="pointer-events-auto border border-status-done/30 bg-status-done-bg text-[11px] text-status-done backdrop-blur-md"
           >
             Complete
           </Badge>
         )}
 
+        {mode === "replay" && (
+          <Badge
+            variant="secondary"
+            className="pointer-events-auto border border-primary/30 bg-primary/10 text-[11px] text-primary backdrop-blur-md"
+          >
+            Replaying
+          </Badge>
+        )}
+
         <div className="flex-1" />
 
-        <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-border/60 bg-background/80 p-1 shadow-sm backdrop-blur-md">
+        {mode === "replay" && (
           <Button
             variant="ghost"
             size="xs"
-            onClick={() => setMode(mode === "live" ? "replay" : "live")}
+            className="pointer-events-auto"
+            onClick={() => setMode("live")}
           >
-            <RotateCcw className="h-3 w-3" />
-            {mode === "live" ? "Replay" : "Live"}
+            Back to Live
           </Button>
+        )}
+
+        <div className="pointer-events-auto">
           <ThemeToggle />
         </div>
       </div>
 
       {/* Chat panel */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20">
-        <div className="pointer-events-auto">
-          <DraggablePanel>
-            <ChatPanel
-              messages={live.chatMessages}
-              plannerThinking={live.plannerThinking}
-              plannerOutput={live.plannerOutput}
-              isDesigning={live.isDesigning}
-              isRunning={live.isRunning}
-              hasSpec={!!live.envSpec}
-              onDesign={(msg) => live.design(msg, bucket.items)}
-              onEdit={(msg) => live.edit(msg, bucket.items)}
-              onExecute={(prompt) => live.execute(bucket.items, prompt)}
-              onStop={live.stop}
-            />
-          </DraggablePanel>
+      {env.activeEnvId && mode === "live" && (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-20">
+          <div className="pointer-events-auto">
+            <DraggablePanel>
+              <ChatPanel
+                messages={live.chatMessages}
+                plannerThinking={live.plannerThinking}
+                plannerOutput={live.plannerOutput}
+                isDesigning={live.isDesigning}
+                isRunning={live.isRunning}
+                hasSpec={!!live.envSpec}
+                onDesign={(msg) => live.design(msg, bucket.items)}
+                onEdit={(msg) => live.edit(msg, bucket.items)}
+                onExecute={(prompt) => {
+                  live.execute(bucket.items, prompt, env.activeConfigId ?? undefined);
+                  // Refresh runs after a delay
+                  setTimeout(() => env.refreshRuns(), 2000);
+                }}
+                onStop={live.stop}
+              />
+            </DraggablePanel>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Agent detail */}
       {selectedAgent && (
@@ -220,8 +277,11 @@ export default function Home() {
                   status={selectedAgent.status}
                   thinking={selectedAgent.thinking}
                   output={selectedAgent.output}
-                  onUpdateConfig={(action, field, item) =>
-                    live.updateAgentConfig(selectedAgentId!, action, field, item)
+                  onUpdateConfig={
+                    mode === "live"
+                      ? (action, field, item) =>
+                          live.updateAgentConfig(selectedAgentId!, action, field, item)
+                      : undefined
                   }
                 />
               </div>

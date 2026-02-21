@@ -230,10 +230,9 @@ export function useOrchestrate() {
   }, [envSpec, processEvent]);
 
   // Execute the current spec (run agents)
-  const execute = useCallback(async (bucketItems?: BucketItem[], prompt?: string) => {
+  const execute = useCallback(async (bucketItems?: BucketItem[], prompt?: string, configId?: string) => {
     if (!envSpec) return;
 
-    // Reset agent states but keep spec
     setAgents(
       new Map(
         envSpec.agents.map((a) => [
@@ -251,7 +250,7 @@ export function useOrchestrate() {
 
     try {
       await streamSSE(
-        { action: "execute", spec: envSpec, bucketItems, prompt },
+        { action: "execute", spec: envSpec, bucketItems, prompt, configId },
         abort.signal,
         processEvent,
       );
@@ -298,6 +297,20 @@ export function useOrchestrate() {
     [],
   );
 
+  const loadSpec = useCallback((spec: EnvironmentSpec) => {
+    setEnvSpec(spec);
+    setAgents(
+      new Map(
+        spec.agents.map((a) => [
+          a.id,
+          { spec: a, status: "pending" as AgentStatus, thinking: "", output: "" },
+        ]),
+      ),
+    );
+    setEvents([]);
+    setIsComplete(false);
+  }, []);
+
   const stop = useCallback(() => {
     abortRef.current?.abort();
     setIsDesigning(false);
@@ -315,6 +328,7 @@ export function useOrchestrate() {
     plannerOutput,
     chatMessages,
     design,
+    loadSpec,
     edit,
     execute,
     stop,
