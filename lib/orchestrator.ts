@@ -30,19 +30,51 @@ Design 2-4 agents. Make them diverse and specialized. Each agent should have a c
 export async function* orchestrate(
   task: string,
 ): AsyncGenerator<AgentEvent> {
-  // Step 1: Generate environment spec
-  const planResponse = await client.messages.create({
+  // Step 1: Generate environment spec with streaming so user sees planner thinking
+  const plannerStream = client.messages.stream({
     model: "claude-sonnet-4-20250514",
     max_tokens: 2000,
+    thinking: { type: "enabled", budget_tokens: 4000 },
     system: PLANNER_PROMPT,
     messages: [{ role: "user", content: task }],
   });
 
-  const specText =
-    planResponse.content[0].type === "text"
-      ? planResponse.content[0].text
-      : "";
-  const spec: EnvironmentSpec = JSON.parse(specText);
+  let plannerOutput = "";
+
+  for await (const event of plannerStream) {
+    if (event.type === "content_block_delta") {
+      if (event.delta.type === "thinking_delta") {
+        yield {
+          type: "planner_thinking",
+          content: event.delta.thinking,
+          timestamp: Date.now(),
+        };
+      } else if (event.delta.type === "text_delta") {
+        plannerOutput += event.delta.text;
+        yield {
+          type: "planner_output",
+          content: event.delta.text,
+          timestamp: Date.now(),
+        };
+      }
+    }
+  }
+
+  // Parse the spec from planner output
+  let spec: EnvironmentSpec;
+  try {
+    // Try to extract JSON from the output (in case there's extra text)
+    const jsonMatch = plannerOutput.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON found in planner output");
+    spec = JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    yield {
+      type: "error",
+      message: `Failed to parse environment spec: ${e}`,
+      timestamp: Date.now(),
+    };
+    return;
+  }
 
   yield { type: "env_created", spec, timestamp: Date.now() };
 
@@ -64,7 +96,6 @@ export async function* orchestrate(
 
     const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext);
 
-    // Stream the agent's response with extended thinking
     const stream = client.messages.stream({
       model: "claude-sonnet-4-20250514",
       max_tokens: 4000,
@@ -79,12 +110,10 @@ export async function* orchestrate(
     });
 
     let fullOutput = "";
-    let fullThinking = "";
 
     for await (const event of stream) {
       if (event.type === "content_block_delta") {
         if (event.delta.type === "thinking_delta") {
-          fullThinking += event.delta.thinking;
           yield {
             type: "thinking",
             agentId: agent.id,
@@ -105,7 +134,6 @@ export async function* orchestrate(
 
     completed[agent.id] = fullOutput;
 
-    // Emit messages to dependent agents
     for (const other of spec.agents) {
       if (other.dependsOn.includes(agent.id)) {
         yield {

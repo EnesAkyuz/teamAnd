@@ -5,6 +5,7 @@ import { Play, Square, RotateCcw, X } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
 import { AgentDetail } from "@/components/agent-detail";
 import { EventLog } from "@/components/event-log";
+import { PlannerPanel } from "@/components/planner-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,7 +20,10 @@ export default function Home() {
 
   const live = useOrchestrate();
   const replay = useReplay();
-  const active = mode === "live" ? live : replay;
+
+  const activeAgents = mode === "live" ? live.agents : replay.agents;
+  const activeEvents = mode === "live" ? live.events : replay.events;
+  const activeEnvSpec = mode === "live" ? live.envSpec : replay.envSpec;
 
   const handleSubmit = () => {
     if (!task.trim()) return;
@@ -29,49 +33,60 @@ export default function Home() {
   };
 
   const selectedAgent = selectedAgentId
-    ? active.agents.get(selectedAgentId)
+    ? activeAgents.get(selectedAgentId)
     : null;
 
   const isActive = mode === "live" ? live.isRunning : replay.isReplaying;
-  const hasContent = active.agents.size > 0 || isActive;
+  const hasContent = activeAgents.size > 0 || isActive;
+
+  // Determine if planner is currently thinking (before env_created)
+  const isPlannerPhase = isActive && !activeEnvSpec;
+  const hasPlannerContent = live.plannerThinking || live.plannerOutput;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
       {/* Canvas fills everything */}
       <div className="absolute inset-0">
-        {hasContent ? (
+        {hasContent && activeAgents.size > 0 ? (
           <AgentCanvas
-            agents={active.agents}
+            agents={activeAgents}
             selectedAgentId={selectedAgentId}
             onSelectAgent={setSelectedAgentId}
           />
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-muted-foreground">
-              Enter a task to spawn your agent team.
+              {isPlannerPhase
+                ? ""
+                : "Enter a task to spawn your agent team."}
             </p>
           </div>
         )}
       </div>
 
       {/* Top bar — floating */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-3 px-4 pt-3">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 px-3 pt-3">
         <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-3 py-1.5 shadow-sm backdrop-blur-md">
           <span className="text-sm font-semibold tracking-tight">
             agent<span className="text-primary">scope</span>
           </span>
         </div>
 
-        {active.envSpec && (
-          <Badge variant="secondary" className="pointer-events-auto backdrop-blur-md bg-background/80 border border-border/60 text-muted-foreground text-[11px]">
-            {active.envSpec.name} / {active.envSpec.agents.length} agents
+        {activeEnvSpec && (
+          <Badge
+            variant="secondary"
+            className="pointer-events-auto border border-border/60 bg-background/80 text-[11px] text-muted-foreground backdrop-blur-md"
+          >
+            {activeEnvSpec.name} / {activeEnvSpec.agents.length} agents
           </Badge>
         )}
 
-        {isActive && !active.envSpec && (
-          <Badge variant="secondary" className="pointer-events-auto backdrop-blur-md bg-background/80 border border-border/60 text-muted-foreground text-[11px]">
-            <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-            Designing team...
+        {live.isComplete && (
+          <Badge
+            variant="secondary"
+            className="pointer-events-auto border border-status-done/30 bg-status-done-bg/80 text-[11px] text-status-done backdrop-blur-md"
+          >
+            Complete
           </Badge>
         )}
 
@@ -117,14 +132,18 @@ export default function Home() {
             )}
           </div>
 
-          {active.envSpec?.rules && active.envSpec.rules.length > 0 && (
+          {activeEnvSpec?.rules && activeEnvSpec.rules.length > 0 && (
             <div className="border-t border-border/40 pt-2">
               <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
                 Rules
               </p>
               <div className="flex flex-wrap gap-1">
-                {active.envSpec.rules.map((rule, i) => (
-                  <Badge key={`r-${i}`} variant="outline" className="text-[10px] font-normal">
+                {activeEnvSpec.rules.map((rule, i) => (
+                  <Badge
+                    key={`r-${i}`}
+                    variant="outline"
+                    className="text-[10px] font-normal"
+                  >
                     {rule}
                   </Badge>
                 ))}
@@ -134,10 +153,23 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Planner panel — floating above task input, left side */}
+      {(isPlannerPhase || hasPlannerContent) && mode === "live" && (
+        <div className="pointer-events-none absolute bottom-[calc(theme(spacing.3)+200px)] left-3 z-20">
+          <div className="pointer-events-auto">
+            <PlannerPanel
+              thinking={live.plannerThinking}
+              output={live.plannerOutput}
+              isThinking={isPlannerPhase && !live.plannerOutput}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Agent detail — floating right panel */}
       {selectedAgent && (
         <div className="absolute right-3 top-14 bottom-3 z-20 w-80">
-          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-background/80 shadow-lg backdrop-blur-xl">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-background/90 shadow-lg backdrop-blur-xl">
             <div className="flex items-center justify-between px-3 pt-3 pb-0">
               <div className="flex items-center gap-2">
                 <div
@@ -149,7 +181,15 @@ export default function Home() {
                         : "bg-muted-foreground"
                   }`}
                 />
-                <span className="text-sm font-medium">{selectedAgent.spec.role}</span>
+                <span className="text-sm font-medium">
+                  {selectedAgent.spec.role}
+                </span>
+                {selectedAgent.status === "active" && (
+                  <Badge variant="secondary" className="h-4 gap-1 px-1.5 text-[9px]">
+                    <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-primary" />
+                    active
+                  </Badge>
+                )}
               </div>
               <Button
                 variant="ghost"
@@ -170,10 +210,10 @@ export default function Home() {
       )}
 
       {/* Event log — floating bottom */}
-      {hasContent && (
+      {hasContent && activeEvents.length > 0 && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
           <div className="pointer-events-auto ml-[21rem] mr-3 mb-3 h-28 overflow-hidden rounded-xl border border-border/60 bg-background/80 shadow-lg backdrop-blur-xl">
-            <EventLog events={active.events} />
+            <EventLog events={activeEvents} />
           </div>
         </div>
       )}

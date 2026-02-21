@@ -11,11 +11,13 @@ function formatEvent(event: AgentEvent): string | null {
   switch (event.type) {
     case "env_created":
       return `Environment "${event.spec.name}" created with ${event.spec.agents.length} agents`;
-    case "agent_spawned":
-      return `${event.agent.role} spawned`;
+    case "planner_thinking":
+    case "planner_output":
     case "thinking":
     case "output":
       return null;
+    case "agent_spawned":
+      return `${event.agent.role} spawned`;
     case "tool_call":
       return `${event.agentId} using ${event.tool}`;
     case "message":
@@ -24,6 +26,8 @@ function formatEvent(event: AgentEvent): string | null {
       return `${event.agentId} done`;
     case "environment_complete":
       return "All agents complete";
+    case "error":
+      return `Error: ${event.message}`;
     default:
       return null;
   }
@@ -46,7 +50,10 @@ export function EventLog({ events }: EventLogProps) {
         </div>
       )}
       {displayEvents.map((event, i) => (
-        <div key={`${event.timestamp}-${i}`} className="flex gap-3 py-px anim-fade-up">
+        <div
+          key={`${event.timestamp}-${i}`}
+          className="flex gap-3 py-px anim-fade-up"
+        >
           <span className="tabular-nums text-muted-foreground/60">
             {new Date(event.timestamp).toLocaleTimeString([], {
               hour: "2-digit",
@@ -60,7 +67,9 @@ export function EventLog({ events }: EventLogProps) {
                 ? "text-status-done"
                 : event.type === "agent_spawned"
                   ? "text-primary"
-                  : "text-muted-foreground"
+                  : event.type === "error"
+                    ? "text-destructive"
+                    : "text-muted-foreground"
             }
           >
             {formatEvent(event)}

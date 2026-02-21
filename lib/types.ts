@@ -19,6 +19,8 @@ export interface EnvironmentSpec {
 
 export type AgentEvent =
   | { type: "env_created"; spec: EnvironmentSpec; timestamp: number }
+  | { type: "planner_thinking"; content: string; timestamp: number }
+  | { type: "planner_output"; content: string; timestamp: number }
   | { type: "agent_spawned"; agent: AgentSpec; timestamp: number }
   | { type: "thinking"; agentId: string; content: string; timestamp: number }
   | { type: "output"; agentId: string; content: string; timestamp: number }
@@ -42,7 +44,8 @@ export type AgentEvent =
       result: string;
       timestamp: number;
     }
-  | { type: "environment_complete"; summary: string; timestamp: number };
+  | { type: "environment_complete"; summary: string; timestamp: number }
+  | { type: "error"; message: string; timestamp: number };
 
 export type AgentStatus = "pending" | "active" | "complete";
 

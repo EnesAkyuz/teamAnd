@@ -20,6 +20,9 @@ export function useOrchestrate() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [envSpec, setEnvSpec] = useState<EnvironmentSpec | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [plannerThinking, setPlannerThinking] = useState("");
+  const [plannerOutput, setPlannerOutput] = useState("");
+  const [isComplete, setIsComplete] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const start = useCallback(async (task: string) => {
@@ -27,6 +30,9 @@ export function useOrchestrate() {
     setEvents([]);
     setEnvSpec(null);
     setIsRunning(true);
+    setIsComplete(false);
+    setPlannerThinking("");
+    setPlannerOutput("");
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -38,6 +44,12 @@ export function useOrchestrate() {
         body: JSON.stringify({ task }),
         signal: abort.signal,
       });
+
+      if (!response.ok) {
+        console.error("Orchestration HTTP error:", response.status);
+        setIsRunning(false);
+        return;
+      }
 
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
@@ -61,6 +73,12 @@ export function useOrchestrate() {
             setEvents((prev) => [...prev, event]);
 
             switch (event.type) {
+              case "planner_thinking":
+                setPlannerThinking((prev) => prev + event.content);
+                break;
+              case "planner_output":
+                setPlannerOutput((prev) => prev + event.content);
+                break;
               case "env_created":
                 setEnvSpec(event.spec);
                 setAgents(
@@ -82,7 +100,10 @@ export function useOrchestrate() {
                   const next = new Map(prev);
                   const existing = next.get(event.agent.id);
                   if (existing) {
-                    next.set(event.agent.id, { ...existing, status: "active" });
+                    next.set(event.agent.id, {
+                      ...existing,
+                      status: "active",
+                    });
                   }
                   return next;
                 });
@@ -126,6 +147,12 @@ export function useOrchestrate() {
                   return next;
                 });
                 break;
+              case "environment_complete":
+                setIsComplete(true);
+                break;
+              case "error":
+                console.error("Orchestration error:", event.message);
+                break;
             }
           } catch {
             // Skip malformed events
@@ -146,5 +173,15 @@ export function useOrchestrate() {
     setIsRunning(false);
   }, []);
 
-  return { agents, events, envSpec, isRunning, start, stop };
+  return {
+    agents,
+    events,
+    envSpec,
+    isRunning,
+    isComplete,
+    plannerThinking,
+    plannerOutput,
+    start,
+    stop,
+  };
 }

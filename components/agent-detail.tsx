@@ -1,6 +1,9 @@
 "use client";
 
-import { Brain, FileText, Shield, Zap, Star } from "lucide-react";
+import { useState } from "react";
+import { Brain, FileText, Shield, Zap, Star, ChevronDown, ChevronRight } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { AgentSpec, AgentStatus } from "@/lib/types";
@@ -18,6 +21,9 @@ export function AgentDetail({
   thinking,
   output,
 }: AgentDetailProps) {
+  const [showThinking, setShowThinking] = useState(false);
+  const isThinking = status === "active" && !output && thinking;
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="px-3 pb-2 pt-1">
@@ -43,29 +49,69 @@ export function AgentDetail({
       </div>
 
       <ScrollArea className="flex-1 border-t border-border/40">
+        {/* Thinking section */}
         {thinking && (
-          <div className="border-b border-border/40 px-3 py-2.5">
-            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-thinking">
-              <Brain className="h-3 w-3" /> Thinking
-            </div>
-            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">
-              {thinking}
-            </pre>
+          <div className="border-b border-border/40">
+            <button
+              type="button"
+              onClick={() => setShowThinking(!showThinking)}
+              className="flex w-full items-center gap-1.5 px-3 py-2 text-[11px] font-medium text-thinking hover:bg-thinking-bg/30 transition-colors"
+            >
+              {showThinking ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+              <Brain className="h-3 w-3" />
+              Thinking
+              {isThinking && (
+                <span className="ml-1 flex items-center gap-0.5">
+                  <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-thinking [animation-delay:0ms]" />
+                  <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-thinking [animation-delay:150ms]" />
+                  <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-thinking [animation-delay:300ms]" />
+                </span>
+              )}
+            </button>
+            {showThinking && (
+              <div className="bg-thinking-bg/30 px-3 pb-2.5">
+                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">
+                  {thinking}
+                </pre>
+              </div>
+            )}
           </div>
         )}
+
+        {/* Active thinking indicator (before any output) */}
+        {status === "active" && !output && !thinking && (
+          <div className="flex items-center gap-2 px-3 py-3">
+            <div className="flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
+            </div>
+            <span className="text-[11px] text-muted-foreground">Working...</span>
+          </div>
+        )}
+
+        {/* Output — markdown rendered */}
         {output && (
           <div className="px-3 py-2.5">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-status-done">
               <FileText className="h-3 w-3" /> Output
             </div>
-            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground">
-              {output}
-            </pre>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-[12px] leading-relaxed [&_pre]:bg-surface-alt [&_pre]:rounded-md [&_pre]:p-2 [&_pre]:text-[11px] [&_code]:text-[11px] [&_p]:my-1 [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {output}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
-        {!thinking && !output && (
+
+        {/* Pending state */}
+        {status === "pending" && (
           <div className="flex h-20 items-center justify-center">
-            <p className="text-xs text-muted-foreground">Waiting...</p>
+            <p className="text-xs text-muted-foreground">Waiting for dependencies...</p>
           </div>
         )}
       </ScrollArea>
