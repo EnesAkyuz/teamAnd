@@ -16,6 +16,8 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { BucketCategory, BucketItem } from "@/lib/types";
@@ -288,10 +290,12 @@ function BucketSection({
                   </button>
                 </Badge>
                 {expandedSkill === item.id && item.content && (
-                  <div className="mt-1 max-h-32 overflow-y-auto rounded-md border border-border/40 bg-muted/30 p-2">
-                    <pre className="whitespace-pre-wrap text-[10px] leading-relaxed text-muted-foreground">
-                      {item.content}
-                    </pre>
+                  <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-border/40 bg-muted/30 p-2">
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-[10px] leading-relaxed [&_pre]:bg-background/50 [&_pre]:rounded [&_pre]:p-1.5 [&_pre]:text-[9px] [&_code]:text-[9px] [&_p]:my-0.5 [&_h1]:text-xs [&_h2]:text-[11px] [&_h3]:text-[10px] [&_ul]:my-0.5 [&_ol]:my-0.5 [&_li]:my-0">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {item.content}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 )}
               </div>
