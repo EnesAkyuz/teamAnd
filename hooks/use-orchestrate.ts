@@ -7,6 +7,7 @@ import type {
   AgentStatus,
   EnvironmentSpec,
 } from "@/lib/types";
+import type { ChatMessage } from "@/components/chat-panel";
 
 interface AgentState {
   spec: AgentSpec;
@@ -14,6 +15,8 @@ interface AgentState {
   thinking: string;
   output: string;
 }
+
+let msgCounter = 0;
 
 export function useOrchestrate() {
   const [agents, setAgents] = useState<Map<string, AgentState>>(new Map());
@@ -23,9 +26,20 @@ export function useOrchestrate() {
   const [plannerThinking, setPlannerThinking] = useState("");
   const [plannerOutput, setPlannerOutput] = useState("");
   const [isComplete, setIsComplete] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   const start = useCallback(async (task: string) => {
+    // Add user message to chat
+    const userMsg: ChatMessage = {
+      id: `msg-${++msgCounter}`,
+      role: "user",
+      content: task,
+      timestamp: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+
+    // Reset agent/event state for new run but keep chat history
     setAgents(new Map());
     setEvents([]);
     setEnvSpec(null);
@@ -36,6 +50,9 @@ export function useOrchestrate() {
 
     const abort = new AbortController();
     abortRef.current = abort;
+
+    let runThinking = "";
+    let runOutput = "";
 
     try {
       const response = await fetch("/api/orchestrate", {
@@ -74,10 +91,12 @@ export function useOrchestrate() {
 
             switch (event.type) {
               case "planner_thinking":
-                setPlannerThinking((prev) => prev + event.content);
+                runThinking += event.content;
+                setPlannerThinking(runThinking);
                 break;
               case "planner_output":
-                setPlannerOutput((prev) => prev + event.content);
+                runOutput += event.content;
+                setPlannerOutput(runOutput);
                 break;
               case "env_created":
                 setEnvSpec(event.spec);
@@ -165,6 +184,21 @@ export function useOrchestrate() {
       }
     } finally {
       setIsRunning(false);
+
+      // Archive planner output into chat history
+      if (runOutput) {
+        const plannerMsg: ChatMessage = {
+          id: `msg-${++msgCounter}`,
+          role: "planner",
+          content: runOutput,
+          thinking: runThinking || undefined,
+          timestamp: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, plannerMsg]);
+        // Clear live planner state since it's now in history
+        setPlannerThinking("");
+        setPlannerOutput("");
+      }
     }
   }, []);
 
@@ -181,6 +215,7 @@ export function useOrchestrate() {
     isComplete,
     plannerThinking,
     plannerOutput,
+    chatMessages,
     start,
     stop,
   };
