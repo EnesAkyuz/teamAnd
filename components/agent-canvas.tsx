@@ -35,8 +35,8 @@ export function AgentCanvas({
 
   useEffect(() => {
     const agentArray = Array.from(agents.entries());
-    const SPACING_X = 320;
-    const SPACING_Y = 220;
+    const SPACING_X = 300;
+    const SPACING_Y = 180;
 
     const depths: Record<string, number> = {};
     function getDepth(id: string): number {
@@ -68,12 +68,9 @@ export function AgentCanvas({
         type: "agent",
         position: {
           x: depth * SPACING_X + 60,
-          y: idx * SPACING_Y - colHeight / 2 + SPACING_Y / 2 + 220,
+          y: idx * SPACING_Y - colHeight / 2 + SPACING_Y / 2 + 200,
         },
-        data: {
-          ...data,
-          selected: id === selectedAgentId,
-        },
+        data: { ...data, selected: id === selectedAgentId },
       };
     });
 
@@ -88,9 +85,10 @@ export function AgentCanvas({
           style: {
             stroke:
               data.status === "active"
-                ? "var(--brand)"
-                : "var(--border-default)",
+                ? "var(--status-active)"
+                : "var(--line-strong)",
             strokeWidth: 1.5,
+            strokeDasharray: data.status === "pending" ? "4 4" : undefined,
           },
         });
       }
@@ -119,7 +117,7 @@ export function AgentCanvas({
         fitView
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="var(--border-subtle)" gap={24} size={1} />
+        <Background color="var(--line)" gap={28} size={0.5} />
         <Controls />
       </ReactFlow>
     </div>

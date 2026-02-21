@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Square, History } from "lucide-react";
+import { Play, Square, RotateCcw } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
 import { AgentDetail } from "@/components/agent-detail";
 import { EventLog } from "@/components/event-log";
@@ -32,45 +32,41 @@ export default function Home() {
   const isActive = mode === "live" ? live.isRunning : replay.isReplaying;
 
   return (
-    <div className="noise-bg relative flex h-screen flex-col bg-background text-text-primary">
-      {/* Top bar */}
-      <header className="relative z-10 flex items-center gap-4 border-b border-border-subtle px-6 py-3">
-        <h1
-          className="text-xl tracking-tight"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          <span className="text-brand">Agent</span>
-          <span className="text-text-primary">Scope</span>
-        </h1>
+    <div className="flex h-screen flex-col bg-background">
+      {/* Header */}
+      <header className="flex h-12 items-center gap-3 border-b border-line px-4">
+        <span className="text-sm font-semibold tracking-tight text-text-1">
+          agent<span className="text-brand">scope</span>
+        </span>
+
         {active.envSpec && (
-          <div className="ml-3 rounded-full border border-border-subtle bg-surface px-3 py-1 text-xs text-text-secondary">
-            {active.envSpec.name} — {active.envSpec.agents.length} agents
-          </div>
+          <span className="rounded-full bg-surface-alt px-2.5 py-0.5 text-[11px] text-text-2">
+            {active.envSpec.name} / {active.envSpec.agents.length} agents
+          </span>
         )}
+
         <div className="flex-1" />
+
         <button
           type="button"
           onClick={() => setMode(mode === "live" ? "replay" : "live")}
-          className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-raised hover:text-text-primary"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-text-3 transition-colors hover:bg-surface-alt hover:text-text-1"
         >
-          <History className="h-3.5 w-3.5" />
-          {mode === "live" ? "History" : "Back to Live"}
+          <RotateCcw className="h-3 w-3" />
+          {mode === "live" ? "Replay" : "Live"}
         </button>
         <ThemeToggle />
       </header>
 
-      <div className="relative z-10 flex flex-1 overflow-hidden">
-        {/* Left panel — task input */}
-        <div className="flex w-72 flex-col border-r border-border-subtle bg-surface">
-          <div className="flex-1 p-5">
-            <label className="mb-2 block text-[11px] font-medium uppercase tracking-widest text-text-tertiary">
-              Task
-            </label>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <div className="flex w-64 flex-col border-r border-line bg-surface">
+          <div className="flex-1 p-4">
             <textarea
               value={task}
               onChange={(e) => setTask(e.target.value)}
-              placeholder="Describe what you want the AI team to accomplish..."
-              className="h-32 w-full resize-none rounded-lg border border-border-subtle bg-background px-3 py-2.5 text-sm text-text-primary placeholder-text-tertiary transition-colors focus:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/10"
+              placeholder="What should the team work on?"
+              className="h-28 w-full resize-none rounded-md border border-line bg-background px-3 py-2 text-sm text-text-1 placeholder:text-text-3 focus:border-brand/50 focus:outline-none focus:ring-1 focus:ring-brand/20"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.metaKey) handleSubmit();
               }}
@@ -79,68 +75,49 @@ export default function Home() {
               type="button"
               onClick={isActive ? live.stop : handleSubmit}
               disabled={!task.trim() && !isActive}
-              className={`mt-3 flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
                 isActive
-                  ? "bg-accent-rose/10 text-accent-rose hover:bg-accent-rose/20"
-                  : "bg-brand text-white shadow-sm hover:opacity-90 disabled:opacity-30"
+                  ? "bg-danger-bg text-danger hover:bg-danger/10"
+                  : "bg-brand text-white hover:bg-brand/90 disabled:opacity-30"
               }`}
             >
               {isActive ? (
-                <>
-                  <Square className="h-3.5 w-3.5" /> Stop
-                </>
+                <><Square className="h-3 w-3" /> Stop</>
               ) : (
-                <>
-                  <Play className="h-3.5 w-3.5" /> Spawn Environment
-                </>
+                <><Play className="h-3 w-3" /> Run</>
               )}
             </button>
 
-            {/* Waiting state */}
             {isActive && !active.envSpec && (
-              <div className="mt-6 flex items-center gap-2 text-xs text-text-tertiary">
-                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+              <p className="mt-4 flex items-center gap-1.5 text-[11px] text-text-3">
+                <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-brand" />
                 Designing team...
-              </div>
+              </p>
             )}
 
-            {/* Environment rules */}
-            {active.envSpec && (
-              <div className="mt-6">
-                <label className="mb-2 block text-[11px] font-medium uppercase tracking-widest text-text-tertiary">
-                  Environment Rules
-                </label>
-                <div className="space-y-1.5">
-                  {active.envSpec.rules.map((rule, i) => (
-                    <div
-                      key={`rule-${i}`}
-                      className="rounded-md border border-border-subtle bg-background px-2.5 py-1.5 text-xs leading-relaxed text-text-secondary"
-                    >
-                      {rule}
-                    </div>
-                  ))}
-                </div>
+            {active.envSpec?.rules && active.envSpec.rules.length > 0 && (
+              <div className="mt-5">
+                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-text-3">
+                  Rules
+                </p>
+                {active.envSpec.rules.map((rule, i) => (
+                  <p key={`r-${i}`} className="py-0.5 text-[11px] leading-relaxed text-text-2">
+                    {rule}
+                  </p>
+                ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* Center + Right panels */}
+        {/* Main */}
         <div className="flex flex-1 flex-col">
           <div className="flex flex-1 overflow-hidden">
-            {/* Canvas */}
             <div className="flex-1">
               {active.agents.size === 0 && !isActive ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3 text-text-tertiary">
-                  <div
-                    className="text-3xl opacity-60"
-                    style={{ fontFamily: "var(--font-display)" }}
-                  >
-                    AgentScope
-                  </div>
-                  <p className="max-w-xs text-center text-sm">
-                    Describe a task and watch AI design and deploy its own team
-                    of specialized agents.
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-sm text-text-3">
+                    Enter a task to get started.
                   </p>
                 </div>
               ) : (
@@ -152,9 +129,8 @@ export default function Home() {
               )}
             </div>
 
-            {/* Right panel — agent detail */}
             {selectedAgent && (
-              <div className="w-80 overflow-hidden border-l border-border-subtle">
+              <div className="w-72 border-l border-line">
                 <AgentDetail
                   spec={selectedAgent.spec}
                   status={selectedAgent.status}
@@ -165,8 +141,7 @@ export default function Home() {
             )}
           </div>
 
-          {/* Bottom — event log */}
-          <div className="h-36 border-t border-border-subtle bg-surface">
+          <div className="h-32 border-t border-line bg-surface">
             <EventLog events={active.events} />
           </div>
         </div>

@@ -12,19 +12,19 @@ function formatEvent(event: AgentEvent): string | null {
     case "env_created":
       return `Environment "${event.spec.name}" created with ${event.spec.agents.length} agents`;
     case "agent_spawned":
-      return `${event.agent.role} spawned — ${event.agent.personality}`;
+      return `${event.agent.role} spawned`;
     case "thinking":
       return null;
     case "output":
       return null;
     case "tool_call":
-      return `${event.agentId} using tool: ${event.tool}`;
+      return `${event.agentId} using ${event.tool}`;
     case "message":
-      return `${event.from} → ${event.to}: ${event.summary}`;
+      return `${event.from} -> ${event.to}`;
     case "agent_complete":
-      return `${event.agentId} completed`;
+      return `${event.agentId} done`;
     case "environment_complete":
-      return `All agents finished. ${event.summary}`;
+      return "All agents complete";
     default:
       return null;
   }
@@ -40,18 +40,15 @@ export function EventLog({ events }: EventLogProps) {
   const displayEvents = events.filter((e) => formatEvent(e) !== null);
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-5 py-3 font-mono text-xs">
+    <div className="flex h-full flex-col overflow-y-auto px-4 py-2 font-mono text-[11px]">
       {displayEvents.length === 0 && (
-        <div className="flex h-full items-center justify-center text-text-tertiary">
-          Events will appear here as agents work...
+        <div className="flex h-full items-center text-text-3">
+          Waiting for events...
         </div>
       )}
       {displayEvents.map((event, i) => (
-        <div
-          key={`${event.timestamp}-${i}`}
-          className="flex gap-3 py-1 animate-fade-in-up"
-        >
-          <span className="tabular-nums text-text-tertiary">
+        <div key={`${event.timestamp}-${i}`} className="flex gap-3 py-0.5 anim-fade-up">
+          <span className="tabular-nums text-text-3">
             {new Date(event.timestamp).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
@@ -61,10 +58,10 @@ export function EventLog({ events }: EventLogProps) {
           <span
             className={
               event.type === "environment_complete"
-                ? "text-accent-green"
+                ? "text-status-done"
                 : event.type === "agent_spawned"
-                  ? "text-accent-warm"
-                  : "text-text-secondary"
+                  ? "text-brand"
+                  : "text-text-2"
             }
           >
             {formatEvent(event)}
