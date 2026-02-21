@@ -1,24 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { RotateCcw, X } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
 import { AgentDetail } from "@/components/agent-detail";
 import { EventLog } from "@/components/event-log";
 import { ChatPanel } from "@/components/chat-panel";
+import { BucketPanel } from "@/components/bucket-panel";
 import { DraggablePanel } from "@/components/draggable-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useOrchestrate } from "@/hooks/use-orchestrate";
 import { useReplay } from "@/hooks/use-replay";
+import { useBucket } from "@/hooks/use-bucket";
+import type { BucketCategory } from "@/lib/types";
 
 export default function Home() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [mode, setMode] = useState<"live" | "replay">("live");
+  const [isOptimizing, setIsOptimizing] = useState(false);
 
   const live = useOrchestrate();
   const replay = useReplay();
+  const bucket = useBucket();
 
   const activeAgents = mode === "live" ? live.agents : replay.agents;
   const activeEvents = mode === "live" ? live.events : replay.events;
@@ -32,15 +37,72 @@ export default function Home() {
   const hasContent = activeAgents.size > 0 || isActive;
   const isPlannerPhase = isActive && !activeEnvSpec;
 
+  // Map bucket category to agent spec field
+  const categoryToField = useCallback(
+    (cat: BucketCategory): "skills" | "values" | "tools" | "rules" => {
+      switch (cat) {
+        case "skill": return "skills";
+        case "value": return "values";
+        case "tool": return "tools";
+        case "rule": return "rules";
+      }
+    },
+    [],
+  );
+
+  const handleDropBucketItem = useCallback(
+    (agentId: string, category: BucketCategory, label: string) => {
+      live.updateAgentConfig(agentId, "add", categoryToField(category), label);
+    },
+    [live.updateAgentConfig, categoryToField],
+  );
+
+  const handleOptimize = useCallback(async () => {
+    if (!live.envSpec || bucket.items.length === 0) return;
+    setIsOptimizing(true);
+    try {
+      const res = await fetch("/api/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spec: live.envSpec, bucketItems: bucket.items }),
+      });
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // We just need the final env_created event
+      }
+      // Parse final events from buffer
+      const lines = buffer.split("\n");
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          if (event.type === "env_created") {
+            // Re-initialize agents with optimized spec
+            live.start(`Optimize: ${live.envSpec.objective}`, bucket.items);
+            break;
+          }
+        } catch { /* skip */ }
+      }
+    } finally {
+      setIsOptimizing(false);
+    }
+  }, [live.envSpec, bucket.items, live.start]);
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
-      {/* Canvas — full viewport */}
+      {/* Canvas */}
       <div className="absolute inset-0">
         {hasContent && activeAgents.size > 0 ? (
           <AgentCanvas
             agents={activeAgents}
             selectedAgentId={selectedAgentId}
             onSelectAgent={setSelectedAgentId}
+            onDropBucketItem={handleDropBucketItem}
           />
         ) : (
           <div className="flex h-full items-center justify-center">
@@ -57,6 +119,18 @@ export default function Home() {
           <span className="text-sm font-semibold tracking-tight">
             agent<span className="text-primary">scope</span>
           </span>
+        </div>
+
+        {/* Bucket panel — top left */}
+        <div className="pointer-events-auto">
+          <BucketPanel
+            grouped={bucket.grouped}
+            loading={bucket.loading}
+            onAdd={bucket.addItem}
+            onDelete={bucket.deleteItem}
+            onOptimize={live.envSpec ? handleOptimize : undefined}
+            isOptimizing={isOptimizing}
+          />
         </div>
 
         {activeEnvSpec && (
@@ -92,7 +166,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Chat panel — draggable, bottom-left */}
+      {/* Chat panel */}
       <div className="pointer-events-none absolute bottom-3 left-3 z-20">
         <div className="pointer-events-auto">
           <DraggablePanel>
@@ -102,14 +176,14 @@ export default function Home() {
               plannerOutput={live.plannerOutput}
               isPlannerActive={isPlannerPhase}
               isRunning={live.isRunning}
-              onSend={(msg) => live.start(msg)}
+              onSend={(msg) => live.start(msg, bucket.items)}
               onStop={live.stop}
             />
           </DraggablePanel>
         </div>
       </div>
 
-      {/* Agent detail — draggable */}
+      {/* Agent detail */}
       {selectedAgent && (
         <div className="pointer-events-none absolute right-3 top-14 z-20">
           <div className="pointer-events-auto">
@@ -155,6 +229,9 @@ export default function Home() {
                   status={selectedAgent.status}
                   thinking={selectedAgent.thinking}
                   output={selectedAgent.output}
+                  onUpdateConfig={(action, field, item) =>
+                    live.updateAgentConfig(selectedAgentId!, action, field, item)
+                  }
                 />
               </div>
             </DraggablePanel>
@@ -162,7 +239,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Event log — draggable */}
+      {/* Event log */}
       {hasContent && activeEvents.length > 0 && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-10">
           <div className="pointer-events-auto">
@@ -177,28 +254,6 @@ export default function Home() {
                 <EventLog events={activeEvents} />
               </div>
             </DraggablePanel>
-          </div>
-        </div>
-      )}
-
-      {/* Environment rules — floating top-left under logo if present */}
-      {activeEnvSpec?.rules && activeEnvSpec.rules.length > 0 && (
-        <div className="pointer-events-none absolute left-3 top-14 z-10">
-          <div className="pointer-events-auto max-w-64 overflow-hidden rounded-lg border border-border/60 bg-background/80 p-2.5 shadow-sm backdrop-blur-md">
-            <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-              Rules
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {activeEnvSpec.rules.map((rule, i) => (
-                <Badge
-                  key={`r-${i}`}
-                  variant="outline"
-                  className="shrink-0 text-[10px] font-normal"
-                >
-                  {rule}
-                </Badge>
-              ))}
-            </div>
           </div>
         </div>
       )}

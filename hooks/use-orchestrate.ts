@@ -5,6 +5,7 @@ import type {
   AgentEvent,
   AgentSpec,
   AgentStatus,
+  BucketItem,
   EnvironmentSpec,
 } from "@/lib/types";
 import type { ChatMessage } from "@/components/chat-panel";
@@ -29,7 +30,31 @@ export function useOrchestrate() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
-  const start = useCallback(async (task: string) => {
+  const updateAgentConfig = useCallback(
+    (
+      agentId: string,
+      action: "add" | "remove",
+      field: "skills" | "values" | "tools" | "rules",
+      item: string,
+    ) => {
+      setAgents((prev) => {
+        const next = new Map(prev);
+        const agent = next.get(agentId);
+        if (!agent) return prev;
+        const spec = { ...agent.spec };
+        if (action === "add" && !spec[field].includes(item)) {
+          spec[field] = [...spec[field], item];
+        } else if (action === "remove") {
+          spec[field] = spec[field].filter((i) => i !== item);
+        }
+        next.set(agentId, { ...agent, spec });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const start = useCallback(async (task: string, bucketItems?: BucketItem[]) => {
     // Add user message to chat
     const userMsg: ChatMessage = {
       id: `msg-${++msgCounter}`,
@@ -58,7 +83,7 @@ export function useOrchestrate() {
       const response = await fetch("/api/orchestrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task }),
+        body: JSON.stringify({ task, bucketItems }),
         signal: abort.signal,
       });
 
@@ -218,5 +243,6 @@ export function useOrchestrate() {
     chatMessages,
     start,
     stop,
+    updateAgentConfig,
   };
 }

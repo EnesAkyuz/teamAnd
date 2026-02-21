@@ -34,6 +34,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      bucket_items: {
+        Row: {
+          category: string
+          created_at: string | null
+          id: string
+          label: string
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          id?: string
+          label: string
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          id?: string
+          label?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           agent_id: string | null

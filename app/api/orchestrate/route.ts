@@ -5,7 +5,7 @@ import type { Json } from "@/lib/database.types";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const { task } = await request.json();
+  const { task, bucketItems } = await request.json();
 
   // Create session in Supabase (fire-and-forget for the rest)
   const { data: session } = await supabase
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of orchestrate(task)) {
+        for await (const event of orchestrate(task, bucketItems)) {
           // Send SSE immediately — don't block on DB writes
           const data = `data: ${JSON.stringify(event)}\n\n`;
           controller.enqueue(encoder.encode(data));

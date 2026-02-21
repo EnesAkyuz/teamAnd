@@ -49,6 +49,15 @@ export type AgentEvent =
 
 export type AgentStatus = "pending" | "active" | "complete";
 
+export type BucketCategory = "rule" | "skill" | "value" | "tool";
+
+export interface BucketItem {
+  id: string;
+  category: BucketCategory;
+  label: string;
+  createdAt: string;
+}
+
 export interface AgentNode {
   spec: AgentSpec;
   status: AgentStatus;

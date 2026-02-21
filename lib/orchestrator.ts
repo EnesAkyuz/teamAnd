@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AgentEvent, AgentSpec, EnvironmentSpec } from "./types";
+import type { AgentEvent, AgentSpec, BucketItem, EnvironmentSpec } from "./types";
 
 const client = new Anthropic();
 
@@ -29,13 +29,29 @@ Design 2-4 agents. Make them diverse and specialized. Each agent should have a c
 
 export async function* orchestrate(
   task: string,
+  bucketItems?: BucketItem[],
 ): AsyncGenerator<AgentEvent> {
+  // Build system prompt with optional bucket context
+  let systemPrompt = PLANNER_PROMPT;
+  if (bucketItems && bucketItems.length > 0) {
+    const rules = bucketItems.filter((i) => i.category === "rule").map((i) => i.label);
+    const skills = bucketItems.filter((i) => i.category === "skill").map((i) => i.label);
+    const values = bucketItems.filter((i) => i.category === "value").map((i) => i.label);
+    const tools = bucketItems.filter((i) => i.category === "tool").map((i) => i.label);
+    const parts: string[] = [];
+    if (rules.length) parts.push(`Available Rules: ${rules.join(", ")}`);
+    if (skills.length) parts.push(`Available Skills: ${skills.join(", ")}`);
+    if (values.length) parts.push(`Available Values: ${values.join(", ")}`);
+    if (tools.length) parts.push(`Available Tools: ${tools.join(", ")}`);
+    systemPrompt += `\n\nThe user has pre-configured these resources. Prefer assigning them to agents when relevant:\n${parts.join("\n")}\nYou may also add items beyond this list.`;
+  }
+
   // Step 1: Generate environment spec with streaming so user sees planner thinking
   const plannerStream = client.messages.stream({
     model: "claude-sonnet-4-20250514",
     max_tokens: 8000,
     thinking: { type: "enabled", budget_tokens: 4000 },
-    system: PLANNER_PROMPT,
+    system: systemPrompt,
     messages: [{ role: "user", content: task }],
   });
 
@@ -181,6 +197,54 @@ ${[...agent.rules, ...globalRules].map((r) => `- ${r}`).join("\n")}
 ${agent.memory.length > 0 ? `Memory/Context:\n${agent.memory.join("\n")}` : ""}
 
 You are part of a team. Stay focused on YOUR role. Be concise but thorough. Output your work directly.`;
+}
+
+const OPTIMIZER_PROMPT = `You are an AI team optimizer. Given a current team configuration and a set of available resources, redistribute skills, tools, values, and rules across agents for maximum effectiveness.
+
+Return ONLY valid JSON matching the same EnvironmentSpec schema as the input, with optimized agent configurations. Keep agent IDs and dependsOn relationships the same. Only modify skills, tools, values, and rules arrays.`;
+
+export async function* optimizeAgents(
+  currentSpec: EnvironmentSpec,
+  bucketItems: BucketItem[],
+): AsyncGenerator<AgentEvent> {
+  const rules = bucketItems.filter((i) => i.category === "rule").map((i) => i.label);
+  const skills = bucketItems.filter((i) => i.category === "skill").map((i) => i.label);
+  const values = bucketItems.filter((i) => i.category === "value").map((i) => i.label);
+  const tools = bucketItems.filter((i) => i.category === "tool").map((i) => i.label);
+
+  const stream = client.messages.stream({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 8000,
+    thinking: { type: "enabled", budget_tokens: 4000 },
+    system: OPTIMIZER_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `Current team:\n${JSON.stringify(currentSpec, null, 2)}\n\nAvailable resources:\nRules: ${rules.join(", ")}\nSkills: ${skills.join(", ")}\nValues: ${values.join(", ")}\nTools: ${tools.join(", ")}\n\nOptimize the distribution.`,
+      },
+    ],
+  });
+
+  let output = "";
+  for await (const event of stream) {
+    if (event.type === "content_block_delta") {
+      if (event.delta.type === "thinking_delta") {
+        yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
+      } else if (event.delta.type === "text_delta") {
+        output += event.delta.text;
+        yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
+      }
+    }
+  }
+
+  try {
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON found");
+    const spec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
+    yield { type: "env_created", spec, timestamp: Date.now() };
+  } catch (e) {
+    yield { type: "error", message: `Optimize parse error: ${e}`, timestamp: Date.now() };
+  }
 }
 
 function topologicalSort(agents: AgentSpec[]): AgentSpec[] {

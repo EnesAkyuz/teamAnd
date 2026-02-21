@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect } from "react";
-import type { AgentSpec, AgentStatus } from "@/lib/types";
+import type { AgentSpec, AgentStatus, BucketCategory } from "@/lib/types";
 import { AgentNodeComponent } from "./agent-node";
 
 interface AgentCanvasProps {
@@ -21,6 +21,7 @@ interface AgentCanvasProps {
   >;
   selectedAgentId: string | null;
   onSelectAgent: (id: string | null) => void;
+  onDropBucketItem?: (agentId: string, category: BucketCategory, label: string) => void;
 }
 
 const nodeTypes = { agent: AgentNodeComponent };
@@ -29,6 +30,7 @@ export function AgentCanvas({
   agents,
   selectedAgentId,
   onSelectAgent,
+  onDropBucketItem,
 }: AgentCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -70,7 +72,7 @@ export function AgentCanvas({
           x: depth * SPACING_X + 60,
           y: idx * SPACING_Y - colHeight / 2 + SPACING_Y / 2 + 200,
         },
-        data: { ...data, selected: id === selectedAgentId },
+        data: { ...data, selected: id === selectedAgentId, onDropBucketItem },
       };
     });
 
