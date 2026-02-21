@@ -52,7 +52,7 @@ export function AgentNodeComponent({ data }: NodeProps) {
         className={`
           min-w-[210px] max-w-[270px] rounded-xl border p-3 backdrop-blur-md transition-all duration-300
           ${status === "active" ? "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10" : ""}
-          ${status === "complete" ? "border-status-done/40 bg-status-done-bg/60 shadow-sm" : ""}
+          ${status === "complete" ? "border-status-done bg-status-done-bg shadow-sm" : ""}
           ${status === "pending" ? "border-border/60 bg-background/90 opacity-60 shadow-sm" : ""}
           ${selected ? "ring-2 ring-primary/30 ring-offset-1 ring-offset-background" : ""}
           ${isDropTarget ? "ring-2 ring-primary/50 border-primary/60 scale-[1.02]" : ""}

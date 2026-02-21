@@ -279,20 +279,68 @@ export async function* executeAgents(
     if (level.length === 1) {
       yield* runAgent(level[0], spec, completed, skillContent, userPrompt);
     } else {
-      const agentResults = await Promise.all(
-        level.map((agent) => collectAgentRun(agent, spec, completed, skillContent, userPrompt)),
-      );
-
-      for (const { agent, events, output } of agentResults) {
-        for (const event of events) {
-          yield event;
-        }
-        completed[agent.id] = output;
-      }
+      // Run parallel agents with real-time event streaming
+      yield* runAgentsParallel(level, spec, completed, skillContent, userPrompt);
     }
   }
 
   yield { type: "environment_complete", summary: "All agents completed their tasks.", timestamp: Date.now() };
+}
+
+// Run multiple agents in parallel, streaming events as they arrive from any agent
+async function* runAgentsParallel(
+  agents: AgentSpec[],
+  spec: EnvironmentSpec,
+  completed: Record<string, string>,
+  skillContent: Record<string, string>,
+  userPrompt?: string,
+): AsyncGenerator<AgentEvent> {
+  // Shared event queue
+  const queue: AgentEvent[] = [];
+  let resolve: (() => void) | null = null;
+  let allDone = false;
+
+  function pushEvent(event: AgentEvent) {
+    queue.push(event);
+    if (resolve) {
+      resolve();
+      resolve = null;
+    }
+  }
+
+  // Launch all agents concurrently, each pushing events to queue
+  const promises = agents.map(async (agent) => {
+    const gen = runAgent(agent, spec, completed, skillContent, userPrompt);
+    const events: AgentEvent[] = [];
+    let output = "";
+
+    for await (const event of gen) {
+      pushEvent(event);
+      events.push(event);
+      if (event.type === "output") output += event.content;
+    }
+
+    completed[agent.id] = output;
+  });
+
+  // Wait for all to finish, then mark done
+  Promise.all(promises).then(() => {
+    allDone = true;
+    if (resolve) {
+      resolve();
+      resolve = null;
+    }
+  });
+
+  // Yield events as they arrive
+  while (true) {
+    while (queue.length > 0) {
+      yield queue.shift()!;
+    }
+    if (allDone && queue.length === 0) break;
+    // Wait for next event
+    await new Promise<void>((r) => { resolve = r; });
+  }
 }
 
 // Run a single agent, yielding events as they stream
@@ -375,84 +423,6 @@ async function* runAgent(
 }
 
 // Run agent and collect all events (for parallel execution)
-async function collectAgentRun(
-  agent: AgentSpec,
-  spec: EnvironmentSpec,
-  completed: Record<string, string>,
-  skillContent: Record<string, string> = {},
-  userPrompt?: string,
-): Promise<{ agent: AgentSpec; events: AgentEvent[]; output: string }> {
-  const events: AgentEvent[] = [];
-  let output = "";
-
-  events.push({ type: "agent_spawned", agent, timestamp: Date.now() });
-
-  const upstreamContext = agent.dependsOn
-    .filter((id) => completed[id])
-    .map((id) => {
-      const upstream = spec.agents.find((a) => a.id === id);
-      return `[${upstream?.role ?? id}]: ${completed[id]}`;
-    })
-    .join("\n\n");
-
-  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext, skillContent);
-  const tools = resolveTools(agent.tools);
-
-  const streamOpts: Record<string, unknown> = {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 16000,
-    thinking: { type: "enabled", budget_tokens: 8000 },
-    system: systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: `Task: ${spec.objective}${userPrompt ? `\n\nUser prompt: ${userPrompt}` : ""}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
-      },
-    ],
-  };
-  if (tools.length > 0) {
-    streamOpts.tools = tools;
-  }
-
-  const stream = client.messages.stream(streamOpts as Parameters<typeof client.messages.stream>[0]);
-
-  for await (const event of stream) {
-    if (event.type === "content_block_delta") {
-      if (event.delta.type === "thinking_delta") {
-        events.push({ type: "thinking", agentId: agent.id, content: event.delta.thinking, timestamp: Date.now() });
-      } else if (event.delta.type === "text_delta") {
-        output += event.delta.text;
-        events.push({ type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() });
-      }
-    }
-    if (event.type === "content_block_start" && (event as unknown as { content_block: { type: string; name: string } }).content_block.type === "server_tool_use") {
-      events.push({
-        type: "tool_call",
-        agentId: agent.id,
-        tool: (event as unknown as { content_block: { name: string } }).content_block.name,
-        input: "",
-        timestamp: Date.now(),
-      });
-    }
-  }
-
-  for (const other of spec.agents) {
-    if (other.dependsOn.includes(agent.id)) {
-      events.push({
-        type: "message",
-        from: agent.id,
-        to: other.id,
-        summary: output.slice(0, 150) + (output.length > 150 ? "..." : ""),
-        timestamp: Date.now(),
-      });
-    }
-  }
-
-  events.push({ type: "agent_complete", agentId: agent.id, result: output, timestamp: Date.now() });
-
-  return { agent, events, output };
-}
-
 export async function* optimizeAgents(
   currentSpec: EnvironmentSpec,
   bucketItems: BucketItem[],
