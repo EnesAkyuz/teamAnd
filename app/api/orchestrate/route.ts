@@ -1,27 +1,43 @@
-import { orchestrate } from "@/lib/orchestrator";
+import { designTeam, editSpec, executeAgents } from "@/lib/orchestrator";
 import { supabase } from "@/lib/supabase";
 import type { Json } from "@/lib/database.types";
 
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const { task, bucketItems } = await request.json();
+  const { action, task, spec, bucketItems } = await request.json();
 
-  // Create session in Supabase (fire-and-forget for the rest)
-  const { data: session } = await supabase
-    .from("sessions")
-    .insert({ task })
-    .select("id")
-    .single();
-
-  const sessionId = session?.id;
+  // Create session for new designs
+  let sessionId: string | undefined;
+  if (action === "design" || action === "execute") {
+    const { data: session } = await supabase
+      .from("sessions")
+      .insert({ task: task ?? spec?.objective ?? "run" })
+      .select("id")
+      .single();
+    sessionId = session?.id;
+  }
 
   const encoder = new TextEncoder();
+
+  // Pick the right generator based on action
+  function getGenerator() {
+    switch (action) {
+      case "design":
+        return designTeam(task, bucketItems ?? []);
+      case "edit":
+        return editSpec(spec, task, bucketItems ?? []);
+      case "execute":
+        return executeAgents(spec);
+      default:
+        throw new Error(`Unknown action: ${action}`);
+    }
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of orchestrate(task, bucketItems)) {
-          // Send SSE immediately — don't block on DB writes
+        for await (const event of getGenerator()) {
           const data = `data: ${JSON.stringify(event)}\n\n`;
           controller.enqueue(encoder.encode(data));
 
@@ -41,9 +57,7 @@ export async function POST(request: Request) {
             if (event.type === "env_created") {
               supabase
                 .from("sessions")
-                .update({
-                  environment_spec: event.spec as unknown as Json,
-                })
+                .update({ environment_spec: event.spec as unknown as Json })
                 .eq("id", sessionId)
                 .then();
             }

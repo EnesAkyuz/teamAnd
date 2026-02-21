@@ -33,11 +33,9 @@ export default function Home() {
     ? activeAgents.get(selectedAgentId)
     : null;
 
-  const isActive = mode === "live" ? live.isRunning : replay.isReplaying;
-  const hasContent = activeAgents.size > 0 || isActive;
-  const isPlannerPhase = isActive && !activeEnvSpec;
+  const isBusy = live.isDesigning || live.isRunning;
+  const hasContent = activeAgents.size > 0 || isBusy;
 
-  // Map bucket category to agent spec field
   const categoryToField = useCallback(
     (cat: BucketCategory): "skills" | "values" | "tools" | "rules" => {
       switch (cat) {
@@ -61,37 +59,15 @@ export default function Home() {
     if (!live.envSpec || bucket.items.length === 0) return;
     setIsOptimizing(true);
     try {
-      const res = await fetch("/api/optimize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ spec: live.envSpec, bucketItems: bucket.items }),
-      });
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        // We just need the final env_created event
-      }
-      // Parse final events from buffer
-      const lines = buffer.split("\n");
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        try {
-          const event = JSON.parse(line.slice(6));
-          if (event.type === "env_created") {
-            // Re-initialize agents with optimized spec
-            live.start(`Optimize: ${live.envSpec.objective}`, bucket.items);
-            break;
-          }
-        } catch { /* skip */ }
-      }
+      // Use the edit flow to optimize
+      await live.edit(
+        "Optimize the distribution of skills, tools, values, and rules across agents for maximum effectiveness.",
+        bucket.items,
+      );
     } finally {
       setIsOptimizing(false);
     }
-  }, [live.envSpec, bucket.items, live.start]);
+  }, [live.envSpec, bucket.items, live.edit]);
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
@@ -107,7 +83,7 @@ export default function Home() {
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-muted-foreground">
-              {isPlannerPhase ? "" : "Enter a task to spawn your agent team."}
+              {live.isDesigning ? "" : "Enter a task to design your agent team."}
             </p>
           </div>
         )}
@@ -121,7 +97,7 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Bucket panel — top left */}
+        {/* Bucket dropdown */}
         <div className="pointer-events-auto">
           <BucketPanel
             grouped={bucket.grouped}
@@ -139,6 +115,15 @@ export default function Home() {
             className="pointer-events-auto border border-border/60 bg-background/80 text-[11px] text-muted-foreground backdrop-blur-md"
           >
             {activeEnvSpec.name} / {activeEnvSpec.agents.length} agents
+          </Badge>
+        )}
+
+        {activeEnvSpec && !live.isRunning && !live.isDesigning && !live.isComplete && (
+          <Badge
+            variant="outline"
+            className="pointer-events-auto border-primary/30 text-[11px] text-primary backdrop-blur-md"
+          >
+            Ready to run
           </Badge>
         )}
 
@@ -174,9 +159,12 @@ export default function Home() {
               messages={live.chatMessages}
               plannerThinking={live.plannerThinking}
               plannerOutput={live.plannerOutput}
-              isPlannerActive={isPlannerPhase}
+              isDesigning={live.isDesigning}
               isRunning={live.isRunning}
-              onSend={(msg) => live.start(msg, bucket.items)}
+              hasSpec={!!live.envSpec}
+              onDesign={(msg) => live.design(msg, bucket.items)}
+              onEdit={(msg) => live.edit(msg, bucket.items)}
+              onExecute={live.execute}
               onStop={live.stop}
             />
           </DraggablePanel>
@@ -207,10 +195,7 @@ export default function Home() {
                       {selectedAgent.spec.role}
                     </span>
                     {selectedAgent.status === "active" && (
-                      <Badge
-                        variant="secondary"
-                        className="h-4 gap-1 px-1.5 text-[9px]"
-                      >
+                      <Badge variant="secondary" className="h-4 gap-1 px-1.5 text-[9px]">
                         <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-primary" />
                         active
                       </Badge>
@@ -246,10 +231,7 @@ export default function Home() {
             <DraggablePanel>
               <div
                 className="overflow-hidden rounded-xl border border-border/60 bg-background/80 shadow-lg backdrop-blur-xl"
-                style={{
-                  width: "min(calc(100vw - 22rem), 600px)",
-                  height: "120px",
-                }}
+                style={{ width: "min(calc(100vw - 22rem), 600px)", height: "120px" }}
               >
                 <EventLog events={activeEvents} />
               </div>

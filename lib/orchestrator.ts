@@ -3,7 +3,20 @@ import type { AgentEvent, AgentSpec, BucketItem, EnvironmentSpec } from "./types
 
 const client = new Anthropic();
 
-const PLANNER_PROMPT = `You are an AI team architect. Given a task, design a team of specialized AI agents to accomplish it.
+function buildBucketContext(bucketItems: BucketItem[]): string {
+  const rules = bucketItems.filter((i) => i.category === "rule").map((i) => i.label);
+  const skills = bucketItems.filter((i) => i.category === "skill").map((i) => i.label);
+  const values = bucketItems.filter((i) => i.category === "value").map((i) => i.label);
+  const tools = bucketItems.filter((i) => i.category === "tool").map((i) => i.label);
+  const parts: string[] = [];
+  if (rules.length) parts.push(`Available Rules: ${rules.join(", ")}`);
+  if (skills.length) parts.push(`Available Skills: ${skills.join(", ")}`);
+  if (values.length) parts.push(`Available Values: ${values.join(", ")}`);
+  if (tools.length) parts.push(`Available Tools: ${tools.join(", ")}`);
+  return parts.join("\n");
+}
+
+const DESIGN_PROMPT = `You are an AI team architect. Given a task, design a team of specialized AI agents to accomplish it.
 
 Return ONLY valid JSON matching this schema:
 {
@@ -27,27 +40,22 @@ Return ONLY valid JSON matching this schema:
 
 Design 2-4 agents. Make them diverse and specialized. Each agent should have a clear, distinct role. Use dependsOn to create a logical workflow — some agents need output from others. Tools are conceptual (e.g., "web_search", "code_generation", "analysis", "writing").`;
 
-export async function* orchestrate(
+const EDIT_PROMPT = `You are an AI team architect. The user has an existing team configuration and wants to modify it.
+
+Given the current config and the user's request, return ONLY the updated valid JSON EnvironmentSpec. Keep the same schema. You may add, remove, or modify agents, change their skills/values/tools/rules, or update global rules. Preserve agent IDs when the agent still exists.`;
+
+// Design-only: creates the EnvironmentSpec without executing agents
+export async function* designTeam(
   task: string,
-  bucketItems?: BucketItem[],
+  bucketItems: BucketItem[],
 ): AsyncGenerator<AgentEvent> {
-  // Build system prompt with optional bucket context
-  let systemPrompt = PLANNER_PROMPT;
-  if (bucketItems && bucketItems.length > 0) {
-    const rules = bucketItems.filter((i) => i.category === "rule").map((i) => i.label);
-    const skills = bucketItems.filter((i) => i.category === "skill").map((i) => i.label);
-    const values = bucketItems.filter((i) => i.category === "value").map((i) => i.label);
-    const tools = bucketItems.filter((i) => i.category === "tool").map((i) => i.label);
-    const parts: string[] = [];
-    if (rules.length) parts.push(`Available Rules: ${rules.join(", ")}`);
-    if (skills.length) parts.push(`Available Skills: ${skills.join(", ")}`);
-    if (values.length) parts.push(`Available Values: ${values.join(", ")}`);
-    if (tools.length) parts.push(`Available Tools: ${tools.join(", ")}`);
-    systemPrompt += `\n\nThe user has pre-configured these resources. Prefer assigning them to agents when relevant:\n${parts.join("\n")}\nYou may also add items beyond this list.`;
+  const bucketContext = buildBucketContext(bucketItems);
+  let systemPrompt = DESIGN_PROMPT;
+  if (bucketContext) {
+    systemPrompt += `\n\nThe user has configured these resources. You MUST only use items from this list for agent skills, values, tools, and rules. Do NOT invent new ones.\n${bucketContext}`;
   }
 
-  // Step 1: Generate environment spec with streaming so user sees planner thinking
-  const plannerStream = client.messages.stream({
+  const stream = client.messages.stream({
     model: "claude-sonnet-4-20250514",
     max_tokens: 8000,
     thinking: { type: "enabled", budget_tokens: 4000 },
@@ -55,53 +63,85 @@ export async function* orchestrate(
     messages: [{ role: "user", content: task }],
   });
 
-  let plannerOutput = "";
-
-  for await (const event of plannerStream) {
+  let output = "";
+  for await (const event of stream) {
     if (event.type === "content_block_delta") {
       if (event.delta.type === "thinking_delta") {
-        yield {
-          type: "planner_thinking",
-          content: event.delta.thinking,
-          timestamp: Date.now(),
-        };
+        yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
       } else if (event.delta.type === "text_delta") {
-        plannerOutput += event.delta.text;
-        yield {
-          type: "planner_output",
-          content: event.delta.text,
-          timestamp: Date.now(),
-        };
+        output += event.delta.text;
+        yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
       }
     }
   }
 
-  // Parse the spec from planner output
-  let spec: EnvironmentSpec;
   try {
-    // Try to extract JSON from the output (in case there's extra text)
-    const jsonMatch = plannerOutput.match(/\{[\s\S]*\}/);
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON found in planner output");
-    spec = JSON.parse(jsonMatch[0]);
+    const spec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
+    yield { type: "env_created", spec, timestamp: Date.now() };
   } catch (e) {
-    yield {
-      type: "error",
-      message: `Failed to parse environment spec: ${e}`,
-      timestamp: Date.now(),
-    };
-    return;
+    yield { type: "error", message: `Failed to parse spec: ${e}`, timestamp: Date.now() };
+  }
+}
+
+// Edit existing spec based on user message
+export async function* editSpec(
+  currentSpec: EnvironmentSpec,
+  userMessage: string,
+  bucketItems: BucketItem[],
+): AsyncGenerator<AgentEvent> {
+  const bucketContext = buildBucketContext(bucketItems);
+  let systemPrompt = EDIT_PROMPT;
+  if (bucketContext) {
+    systemPrompt += `\n\nAvailable resources (use ONLY these):\n${bucketContext}`;
   }
 
-  yield { type: "env_created", spec, timestamp: Date.now() };
+  const stream = client.messages.stream({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 8000,
+    thinking: { type: "enabled", budget_tokens: 4000 },
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: `Current config:\n${JSON.stringify(currentSpec, null, 2)}\n\nUser request: ${userMessage}`,
+      },
+    ],
+  });
 
-  // Step 2: Execute agents in dependency order
+  let output = "";
+  for await (const event of stream) {
+    if (event.type === "content_block_delta") {
+      if (event.delta.type === "thinking_delta") {
+        yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
+      } else if (event.delta.type === "text_delta") {
+        output += event.delta.text;
+        yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
+      }
+    }
+  }
+
+  try {
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON found");
+    const spec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
+    yield { type: "env_created", spec, timestamp: Date.now() };
+  } catch (e) {
+    yield { type: "error", message: `Edit parse error: ${e}`, timestamp: Date.now() };
+  }
+}
+
+// Execute agents from a given spec
+export async function* executeAgents(
+  spec: EnvironmentSpec,
+): AsyncGenerator<AgentEvent> {
   const completed: Record<string, string> = {};
   const agentOrder = topologicalSort(spec.agents);
 
   for (const agent of agentOrder) {
     yield { type: "agent_spawned", agent, timestamp: Date.now() };
 
-    // Build context from upstream agents
     const upstreamContext = agent.dependsOn
       .filter((id) => completed[id])
       .map((id) => {
@@ -130,20 +170,10 @@ export async function* orchestrate(
     for await (const event of stream) {
       if (event.type === "content_block_delta") {
         if (event.delta.type === "thinking_delta") {
-          yield {
-            type: "thinking",
-            agentId: agent.id,
-            content: event.delta.thinking,
-            timestamp: Date.now(),
-          };
+          yield { type: "thinking", agentId: agent.id, content: event.delta.thinking, timestamp: Date.now() };
         } else if (event.delta.type === "text_delta") {
           fullOutput += event.delta.text;
-          yield {
-            type: "output",
-            agentId: agent.id,
-            content: event.delta.text,
-            timestamp: Date.now(),
-          };
+          yield { type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() };
         }
       }
     }
@@ -156,34 +186,27 @@ export async function* orchestrate(
           type: "message",
           from: agent.id,
           to: other.id,
-          summary:
-            fullOutput.slice(0, 150) +
-            (fullOutput.length > 150 ? "..." : ""),
+          summary: fullOutput.slice(0, 150) + (fullOutput.length > 150 ? "..." : ""),
           timestamp: Date.now(),
         };
       }
     }
 
-    yield {
-      type: "agent_complete",
-      agentId: agent.id,
-      result: fullOutput,
-      timestamp: Date.now(),
-    };
+    yield { type: "agent_complete", agentId: agent.id, result: fullOutput, timestamp: Date.now() };
   }
 
-  yield {
-    type: "environment_complete",
-    summary: "All agents completed their tasks.",
-    timestamp: Date.now(),
-  };
+  yield { type: "environment_complete", summary: "All agents completed their tasks.", timestamp: Date.now() };
 }
 
-function buildAgentPrompt(
-  agent: AgentSpec,
-  globalRules: string[],
-  upstreamContext: string,
-): string {
+// Keep for optimize
+export async function* optimizeAgents(
+  currentSpec: EnvironmentSpec,
+  bucketItems: BucketItem[],
+): AsyncGenerator<AgentEvent> {
+  yield* editSpec(currentSpec, "Optimize the distribution of skills, tools, values, and rules across agents for maximum effectiveness. Redistribute resources intelligently.", bucketItems);
+}
+
+function buildAgentPrompt(agent: AgentSpec, globalRules: string[], upstreamContext: string): string {
   return `You are ${agent.role}.
 
 Personality: ${agent.personality}
@@ -197,54 +220,6 @@ ${[...agent.rules, ...globalRules].map((r) => `- ${r}`).join("\n")}
 ${agent.memory.length > 0 ? `Memory/Context:\n${agent.memory.join("\n")}` : ""}
 
 You are part of a team. Stay focused on YOUR role. Be concise but thorough. Output your work directly.`;
-}
-
-const OPTIMIZER_PROMPT = `You are an AI team optimizer. Given a current team configuration and a set of available resources, redistribute skills, tools, values, and rules across agents for maximum effectiveness.
-
-Return ONLY valid JSON matching the same EnvironmentSpec schema as the input, with optimized agent configurations. Keep agent IDs and dependsOn relationships the same. Only modify skills, tools, values, and rules arrays.`;
-
-export async function* optimizeAgents(
-  currentSpec: EnvironmentSpec,
-  bucketItems: BucketItem[],
-): AsyncGenerator<AgentEvent> {
-  const rules = bucketItems.filter((i) => i.category === "rule").map((i) => i.label);
-  const skills = bucketItems.filter((i) => i.category === "skill").map((i) => i.label);
-  const values = bucketItems.filter((i) => i.category === "value").map((i) => i.label);
-  const tools = bucketItems.filter((i) => i.category === "tool").map((i) => i.label);
-
-  const stream = client.messages.stream({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 8000,
-    thinking: { type: "enabled", budget_tokens: 4000 },
-    system: OPTIMIZER_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Current team:\n${JSON.stringify(currentSpec, null, 2)}\n\nAvailable resources:\nRules: ${rules.join(", ")}\nSkills: ${skills.join(", ")}\nValues: ${values.join(", ")}\nTools: ${tools.join(", ")}\n\nOptimize the distribution.`,
-      },
-    ],
-  });
-
-  let output = "";
-  for await (const event of stream) {
-    if (event.type === "content_block_delta") {
-      if (event.delta.type === "thinking_delta") {
-        yield { type: "planner_thinking", content: event.delta.thinking, timestamp: Date.now() };
-      } else if (event.delta.type === "text_delta") {
-        output += event.delta.text;
-        yield { type: "planner_output", content: event.delta.text, timestamp: Date.now() };
-      }
-    }
-  }
-
-  try {
-    const jsonMatch = output.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found");
-    const spec: EnvironmentSpec = JSON.parse(jsonMatch[0]);
-    yield { type: "env_created", spec, timestamp: Date.now() };
-  } catch (e) {
-    yield { type: "error", message: `Optimize parse error: ${e}`, timestamp: Date.now() };
-  }
 }
 
 function topologicalSort(agents: AgentSpec[]): AgentSpec[] {

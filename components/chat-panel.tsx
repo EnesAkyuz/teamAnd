@@ -7,10 +7,10 @@ import {
   ChevronRight,
   Maximize2,
   Minimize2,
+  Pencil,
   Play,
   Send,
   Square,
-  X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -29,9 +29,12 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   plannerThinking: string;
   plannerOutput: string;
-  isPlannerActive: boolean;
+  isDesigning: boolean;
   isRunning: boolean;
-  onSend: (message: string) => void;
+  hasSpec: boolean;
+  onDesign: (message: string) => void;
+  onEdit: (message: string) => void;
+  onExecute: () => void;
   onStop: () => void;
 }
 
@@ -39,26 +42,35 @@ export function ChatPanel({
   messages,
   plannerThinking,
   plannerOutput,
-  isPlannerActive,
+  isDesigning,
   isRunning,
-  onSend,
+  hasSpec,
+  onDesign,
+  onEdit,
+  onExecute,
   onStop,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new content
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, plannerThinking, plannerOutput]);
 
+  const isBusy = isDesigning || isRunning;
+
   const handleSubmit = () => {
-    if (!input.trim() || isRunning) return;
-    onSend(input.trim());
+    if (!input.trim() || isBusy) return;
+    const msg = input.trim();
     setInput("");
+    if (hasSpec) {
+      onEdit(msg);
+    } else {
+      onDesign(msg);
+    }
   };
 
   const hasHistory = messages.length > 0 || plannerThinking || plannerOutput;
@@ -80,12 +92,16 @@ export function ChatPanel({
       <div className="flex shrink-0 items-center gap-2 px-3 py-2">
         <span className="text-xs font-medium text-muted-foreground">Chat</span>
 
-        {isPlannerActive && (
-          <Badge
-            variant="secondary"
-            className="h-4 gap-1 px-1.5 text-[9px]"
-          >
+        {isDesigning && (
+          <Badge variant="secondary" className="h-4 gap-1 px-1.5 text-[9px]">
             <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-primary" />
+            designing
+          </Badge>
+        )}
+
+        {isRunning && (
+          <Badge variant="secondary" className="h-4 gap-1 px-1.5 text-[9px]">
+            <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-status-active" />
             running
           </Badge>
         )}
@@ -98,15 +114,11 @@ export function ChatPanel({
           onClick={() => setExpanded(!expanded)}
           className="text-muted-foreground"
         >
-          {expanded ? (
-            <Minimize2 className="h-3 w-3" />
-          ) : (
-            <Maximize2 className="h-3 w-3" />
-          )}
+          {expanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
         </Button>
       </div>
 
-      {/* Messages area */}
+      {/* Messages */}
       {hasHistory && (
         <div
           ref={scrollRef}
@@ -116,29 +128,28 @@ export function ChatPanel({
             <MessageBubble key={msg.id} message={msg} />
           ))}
 
-          {/* Live planner streaming */}
-          {(plannerThinking || plannerOutput || isPlannerActive) && (
+          {(plannerThinking || plannerOutput || isDesigning) && (
             <PlannerBubble
               thinking={plannerThinking}
               output={plannerOutput}
-              isActive={isPlannerActive}
+              isActive={isDesigning}
             />
           )}
         </div>
       )}
 
-      {/* Input */}
+      {/* Input + action buttons */}
       <div className="shrink-0 border-t border-border/40 p-2">
         <div className="flex items-end gap-1.5">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
-              isRunning
-                ? "Agents are working..."
-                : messages.length > 0
-                  ? "Send a follow-up..."
-                  : "What should the team work on?"
+              isBusy
+                ? "Working..."
+                : hasSpec
+                  ? "Edit the team config..."
+                  : "Describe the task..."
             }
             rows={expanded ? 3 : 2}
             className="flex-1 resize-none rounded-lg border border-border/40 bg-background/50 px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
@@ -146,31 +157,34 @@ export function ChatPanel({
               if (e.key === "Enter" && e.metaKey) handleSubmit();
             }}
           />
-          {isRunning ? (
-            <Button
-              size="icon-sm"
-              variant="destructive"
-              onClick={onStop}
-            >
-              <Square className="h-3 w-3" />
-            </Button>
-          ) : (
-            <Button
-              size="icon-sm"
-              onClick={handleSubmit}
-              disabled={!input.trim()}
-            >
-              {messages.length > 0 ? (
-                <Send className="h-3 w-3" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
+          <div className="flex flex-col gap-1">
+            {isBusy ? (
+              <Button size="icon-sm" variant="destructive" onClick={onStop}>
+                <Square className="h-3 w-3" />
+              </Button>
+            ) : (
+              <Button
+                size="icon-sm"
+                variant={hasSpec ? "outline" : "default"}
+                onClick={handleSubmit}
+                disabled={!input.trim()}
+                title={hasSpec ? "Edit config" : "Design team"}
+              >
+                {hasSpec ? <Pencil className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="mt-1.5 flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground/50">
+            {input.trim() ? "⌘ Enter" : ""}
+          </span>
+          {hasSpec && !isRunning && (
+            <Button size="sm" onClick={onExecute} disabled={isDesigning}>
+              <Play className="h-3 w-3" /> Run Agents
             </Button>
           )}
         </div>
-        <p className="mt-1 text-[10px] text-muted-foreground/50">
-          {input.trim() ? "⌘ Enter to send" : ""}
-        </p>
       </div>
     </div>
   );
@@ -188,15 +202,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   }
 
   return (
-    <div>
-      <PlannerBubble
-        thinking={message.thinking ?? ""}
-        output={message.content}
-        isActive={false}
-      />
-    </div>
+    <PlannerBubble
+      thinking={message.thinking ?? ""}
+      output={message.content}
+      isActive={false}
+    />
   );
 }
+
+const PROSE_CLASSES =
+  "prose prose-sm dark:prose-invert max-w-none overflow-x-auto text-[12px] leading-relaxed [&_pre]:overflow-x-auto [&_pre]:bg-muted [&_pre]:rounded-md [&_pre]:p-2 [&_pre]:text-[11px] [&_code]:text-[11px] [&_code]:break-all [&_p]:my-1 [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0";
 
 function PlannerBubble({
   thinking,
@@ -211,18 +226,13 @@ function PlannerBubble({
 
   return (
     <div className="space-y-1">
-      {/* Thinking toggle */}
       {thinking && (
         <button
           type="button"
           onClick={() => setShowThinking(!showThinking)}
           className="flex items-center gap-1 text-[11px] text-thinking transition-colors hover:text-thinking/80"
         >
-          {showThinking ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
+          {showThinking ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           <Brain className="h-3 w-3" />
           <span className="font-medium">Thinking</span>
           {isActive && !output && <ThinkingDots className="ml-1" />}
@@ -230,27 +240,21 @@ function PlannerBubble({
       )}
 
       {showThinking && thinking && (
-        <div
-          className="overflow-y-auto rounded-md bg-thinking-bg/40 px-2.5 py-1.5"
-          style={{ maxHeight: "100px" }}
-        >
+        <div className="overflow-y-auto rounded-md bg-thinking-bg/40 px-2.5 py-1.5" style={{ maxHeight: "100px" }}>
           <pre className="whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-thinking/70">
             {thinking}
           </pre>
         </div>
       )}
 
-      {/* Output */}
       {output ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none text-[12px] leading-relaxed [&_pre]:bg-muted [&_pre]:rounded-md [&_pre]:p-2 [&_pre]:text-[11px] [&_code]:text-[11px] [&_p]:my-1 [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0">
+        <div className={PROSE_CLASSES}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
         </div>
       ) : isActive && !thinking ? (
         <div className="flex items-center gap-2 py-1">
           <ThinkingDots />
-          <span className="text-[11px] text-muted-foreground">
-            Designing team...
-          </span>
+          <span className="text-[11px] text-muted-foreground">Designing team...</span>
         </div>
       ) : null}
     </div>

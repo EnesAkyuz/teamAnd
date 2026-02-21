@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -51,74 +51,79 @@ export function BucketPanel({
   onOptimize,
   isOptimizing,
 }: BucketPanelProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const totalCount =
     grouped.rules.length +
     grouped.skills.length +
     grouped.values.length +
     grouped.tools.length;
 
-  if (!expanded) {
-    return (
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      {/* Trigger button */}
       <button
         type="button"
-        onClick={() => setExpanded(true)}
+        onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-md transition-colors hover:bg-background/95 hover:text-foreground"
       >
         <Package className="h-3.5 w-3.5" />
         Bucket{totalCount > 0 ? ` (${totalCount})` : ""}
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-    );
-  }
 
-  return (
-    <div className="w-72 rounded-xl border border-border/60 bg-background/90 shadow-lg backdrop-blur-xl">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2">
-        <Package className="h-3.5 w-3.5 text-primary" />
-        <span className="text-xs font-medium">Bucket</span>
-        <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">
-          {totalCount}
-        </Badge>
-        <div className="flex-1" />
-        {onOptimize && totalCount > 0 && (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={onOptimize}
-            disabled={isOptimizing}
-            className="text-[10px]"
-          >
-            <Sparkles className="h-3 w-3" />
-            {isOptimizing ? "Optimizing..." : "Optimize"}
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={() => setExpanded(false)}
-          className="text-muted-foreground"
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      </div>
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-xl">
+          {/* Header */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40">
+            <span className="text-xs font-medium">Environment Bucket</span>
+            <div className="flex-1" />
+            {onOptimize && totalCount > 0 && (
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={onOptimize}
+                disabled={isOptimizing}
+                className="text-[10px]"
+              >
+                <Sparkles className="h-3 w-3" />
+                {isOptimizing ? "..." : "Optimize"}
+              </Button>
+            )}
+          </div>
 
-      {/* Sections */}
-      <div className="max-h-[50vh] overflow-y-auto border-t border-border/40">
-        {loading ? (
-          <div className="p-3 text-xs text-muted-foreground">Loading...</div>
-        ) : (
-          SECTIONS.map((section) => (
-            <BucketSection
-              key={section.key}
-              section={section}
-              items={grouped[`${section.key}s` as keyof typeof grouped]}
-              onAdd={(label) => onAdd(section.key, label)}
-              onDelete={onDelete}
-            />
-          ))
-        )}
-      </div>
+          {/* Sections */}
+          <div className="max-h-[50vh] overflow-y-auto">
+            {loading ? (
+              <div className="p-3 text-xs text-muted-foreground">Loading...</div>
+            ) : (
+              SECTIONS.map((section) => (
+                <BucketSection
+                  key={section.key}
+                  section={section}
+                  items={grouped[`${section.key}s` as keyof typeof grouped]}
+                  onAdd={(label) => onAdd(section.key, label)}
+                  onDelete={onDelete}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -134,7 +139,7 @@ function BucketSection({
   onAdd: (label: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [sectionOpen, setSectionOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [input, setInput] = useState("");
   const Icon = section.icon;
@@ -150,10 +155,10 @@ function BucketSection({
     <div className="border-b border-border/40 last:border-b-0">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => setSectionOpen(!sectionOpen)}
         className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-muted/50"
       >
-        {open ? (
+        {sectionOpen ? (
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         ) : (
           <ChevronRight className="h-3 w-3 text-muted-foreground" />
@@ -167,7 +172,7 @@ function BucketSection({
           onClick={(e) => {
             e.stopPropagation();
             setAdding(true);
-            setOpen(true);
+            setSectionOpen(true);
           }}
           onKeyDown={() => {}}
           role="button"
@@ -177,7 +182,7 @@ function BucketSection({
         </span>
       </button>
 
-      {open && (
+      {sectionOpen && (
         <div className="px-3 pb-2">
           <div className="flex flex-wrap gap-1">
             {items.map((item) => (
@@ -189,11 +194,7 @@ function BucketSection({
                 onDragStart={(e) => {
                   e.dataTransfer.setData(
                     "application/bucket-item",
-                    JSON.stringify({
-                      category: item.category,
-                      label: item.label,
-                      id: item.id,
-                    }),
+                    JSON.stringify({ category: item.category, label: item.label, id: item.id }),
                   );
                   e.dataTransfer.effectAllowed = "copy";
                 }}
@@ -208,6 +209,9 @@ function BucketSection({
                 </button>
               </Badge>
             ))}
+            {items.length === 0 && !adding && (
+              <span className="text-[10px] text-muted-foreground/50">None yet</span>
+            )}
           </div>
 
           {adding && (
