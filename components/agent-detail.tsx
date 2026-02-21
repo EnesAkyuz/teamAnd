@@ -1,6 +1,8 @@
 "use client";
 
 import { Brain, FileText, Shield, Zap, Star } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { AgentSpec, AgentStatus } from "@/lib/types";
 
 interface AgentDetailProps {
@@ -17,80 +19,56 @@ export function AgentDetail({
   output,
 }: AgentDetailProps) {
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-surface">
-      <div className="border-b border-line px-4 py-3.5">
-        <div className="flex items-center gap-2">
-          <div
-            className={`h-1.5 w-1.5 rounded-full ${
-              status === "active"
-                ? "bg-status-active animate-pulse"
-                : status === "complete"
-                  ? "bg-status-done"
-                  : "bg-text-3"
-            }`}
-          />
-          <h2 className="text-sm font-medium text-text-1">{spec.role}</h2>
-        </div>
-        <p className="mt-0.5 text-xs text-text-3">{spec.personality}</p>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="px-3 pb-2 pt-1">
+        <p className="text-xs text-muted-foreground">{spec.personality}</p>
       </div>
 
-      <div className="space-y-2 border-b border-line px-4 py-3">
-        {spec.values.length > 0 && (
-          <div className="flex items-start gap-2">
-            <Star className="mt-px h-3 w-3 text-warn" />
-            <div className="flex flex-wrap gap-1">
-              {spec.values.map((v) => (
-                <span key={v} className="rounded bg-warn-bg px-1.5 py-px text-[10px] text-warn">{v}</span>
-              ))}
-            </div>
-          </div>
-        )}
-        {spec.skills.length > 0 && (
-          <div className="flex items-start gap-2">
-            <Zap className="mt-px h-3 w-3 text-status-active" />
-            <div className="flex flex-wrap gap-1">
-              {spec.skills.map((s) => (
-                <span key={s} className="rounded bg-status-active-bg px-1.5 py-px text-[10px] text-status-active">{s}</span>
-              ))}
-            </div>
-          </div>
-        )}
-        {spec.rules.length > 0 && (
-          <div className="flex items-start gap-2">
-            <Shield className="mt-px h-3 w-3 text-danger" />
-            <div className="flex flex-wrap gap-1">
-              {spec.rules.map((r) => (
-                <span key={r} className="rounded bg-danger-bg px-1.5 py-px text-[10px] text-danger">{r}</span>
-              ))}
-            </div>
-          </div>
-        )}
+      <div className="flex flex-wrap gap-1 border-t border-border/40 px-3 py-2.5">
+        {spec.values.map((v) => (
+          <Badge key={v} variant="outline" className="gap-1 text-[10px] font-normal">
+            <Star className="h-2.5 w-2.5 text-warn" /> {v}
+          </Badge>
+        ))}
+        {spec.skills.map((s) => (
+          <Badge key={s} variant="outline" className="gap-1 text-[10px] font-normal">
+            <Zap className="h-2.5 w-2.5 text-primary" /> {s}
+          </Badge>
+        ))}
+        {spec.rules.map((r) => (
+          <Badge key={r} variant="outline" className="gap-1 text-[10px] font-normal">
+            <Shield className="h-2.5 w-2.5 text-destructive" /> {r}
+          </Badge>
+        ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <ScrollArea className="flex-1 border-t border-border/40">
         {thinking && (
-          <div className="border-b border-line px-4 py-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-thinking">
-              <Brain className="h-3 w-3" />
-              Thinking
+          <div className="border-b border-border/40 px-3 py-2.5">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-thinking">
+              <Brain className="h-3 w-3" /> Thinking
             </div>
-            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-text-2">
+            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">
               {thinking}
             </pre>
           </div>
         )}
         {output && (
-          <div className="px-4 py-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-status-done">
-              <FileText className="h-3 w-3" />
-              Output
+          <div className="px-3 py-2.5">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-status-done">
+              <FileText className="h-3 w-3" /> Output
             </div>
-            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-text-1">
+            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground">
               {output}
             </pre>
           </div>
         )}
-      </div>
+        {!thinking && !output && (
+          <div className="flex h-20 items-center justify-center">
+            <p className="text-xs text-muted-foreground">Waiting...</p>
+          </div>
+        )}
+      </ScrollArea>
     </div>
   );
 }

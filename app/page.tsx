@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Square, RotateCcw } from "lucide-react";
+import { Play, Square, RotateCcw, X } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
 import { AgentDetail } from "@/components/agent-detail";
 import { EventLog } from "@/components/event-log";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useOrchestrate } from "@/hooks/use-orchestrate";
 import { useReplay } from "@/hooks/use-replay";
 
@@ -30,122 +33,150 @@ export default function Home() {
     : null;
 
   const isActive = mode === "live" ? live.isRunning : replay.isReplaying;
+  const hasContent = active.agents.size > 0 || isActive;
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="flex h-12 items-center gap-3 border-b border-line px-4">
-        <span className="text-sm font-semibold tracking-tight text-text-1">
-          agent<span className="text-brand">scope</span>
-        </span>
+    <div className="relative h-screen w-screen overflow-hidden bg-background">
+      {/* Canvas fills everything */}
+      <div className="absolute inset-0">
+        {hasContent ? (
+          <AgentCanvas
+            agents={active.agents}
+            selectedAgentId={selectedAgentId}
+            onSelectAgent={setSelectedAgentId}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              Enter a task to spawn your agent team.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Top bar — floating */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-3 px-4 pt-3">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-3 py-1.5 shadow-sm backdrop-blur-md">
+          <span className="text-sm font-semibold tracking-tight">
+            agent<span className="text-primary">scope</span>
+          </span>
+        </div>
 
         {active.envSpec && (
-          <span className="rounded-full bg-surface-alt px-2.5 py-0.5 text-[11px] text-text-2">
+          <Badge variant="secondary" className="pointer-events-auto backdrop-blur-md bg-background/80 border border-border/60 text-muted-foreground text-[11px]">
             {active.envSpec.name} / {active.envSpec.agents.length} agents
-          </span>
+          </Badge>
+        )}
+
+        {isActive && !active.envSpec && (
+          <Badge variant="secondary" className="pointer-events-auto backdrop-blur-md bg-background/80 border border-border/60 text-muted-foreground text-[11px]">
+            <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+            Designing team...
+          </Badge>
         )}
 
         <div className="flex-1" />
 
-        <button
-          type="button"
-          onClick={() => setMode(mode === "live" ? "replay" : "live")}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-text-3 transition-colors hover:bg-surface-alt hover:text-text-1"
-        >
-          <RotateCcw className="h-3 w-3" />
-          {mode === "live" ? "Replay" : "Live"}
-        </button>
-        <ThemeToggle />
-      </header>
+        <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-border/60 bg-background/80 p-1 shadow-sm backdrop-blur-md">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => setMode(mode === "live" ? "replay" : "live")}
+          >
+            <RotateCcw className="h-3 w-3" />
+            {mode === "live" ? "Replay" : "Live"}
+          </Button>
+          <ThemeToggle />
+        </div>
+      </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className="flex w-64 flex-col border-r border-line bg-surface">
-          <div className="flex-1 p-4">
-            <textarea
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder="What should the team work on?"
-              className="h-28 w-full resize-none rounded-md border border-line bg-background px-3 py-2 text-sm text-text-1 placeholder:text-text-3 focus:border-brand/50 focus:outline-none focus:ring-1 focus:ring-brand/20"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.metaKey) handleSubmit();
-              }}
-            />
-            <button
-              type="button"
-              onClick={isActive ? live.stop : handleSubmit}
-              disabled={!task.trim() && !isActive}
-              className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                isActive
-                  ? "bg-danger-bg text-danger hover:bg-danger/10"
-                  : "bg-brand text-white hover:bg-brand/90 disabled:opacity-30"
-              }`}
-            >
-              {isActive ? (
-                <><Square className="h-3 w-3" /> Stop</>
-              ) : (
-                <><Play className="h-3 w-3" /> Run</>
-              )}
-            </button>
-
-            {isActive && !active.envSpec && (
-              <p className="mt-4 flex items-center gap-1.5 text-[11px] text-text-3">
-                <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-brand" />
-                Designing team...
-              </p>
+      {/* Task input — floating bottom-left */}
+      <div className="pointer-events-none absolute bottom-0 left-0 z-20 w-80 p-3">
+        <div className="pointer-events-auto flex flex-col gap-2 rounded-xl border border-border/60 bg-background/80 p-3 shadow-lg backdrop-blur-xl">
+          <Textarea
+            value={task}
+            onChange={(e) => setTask(e.target.value)}
+            placeholder="What should the team work on?"
+            className="min-h-[72px] resize-none border-0 bg-transparent p-0 text-sm shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.metaKey) handleSubmit();
+            }}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">
+              {task.trim() ? "⌘ Enter to run" : ""}
+            </span>
+            {isActive ? (
+              <Button size="sm" variant="destructive" onClick={live.stop}>
+                <Square className="h-3 w-3" /> Stop
+              </Button>
+            ) : (
+              <Button size="sm" onClick={handleSubmit} disabled={!task.trim()}>
+                <Play className="h-3 w-3" /> Run
+              </Button>
             )}
+          </div>
 
-            {active.envSpec?.rules && active.envSpec.rules.length > 0 && (
-              <div className="mt-5">
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-text-3">
-                  Rules
-                </p>
+          {active.envSpec?.rules && active.envSpec.rules.length > 0 && (
+            <div className="border-t border-border/40 pt-2">
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Rules
+              </p>
+              <div className="flex flex-wrap gap-1">
                 {active.envSpec.rules.map((rule, i) => (
-                  <p key={`r-${i}`} className="py-0.5 text-[11px] leading-relaxed text-text-2">
+                  <Badge key={`r-${i}`} variant="outline" className="text-[10px] font-normal">
                     {rule}
-                  </p>
+                  </Badge>
                 ))}
               </div>
-            )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Agent detail — floating right panel */}
+      {selectedAgent && (
+        <div className="absolute right-3 top-14 bottom-3 z-20 w-80">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-background/80 shadow-lg backdrop-blur-xl">
+            <div className="flex items-center justify-between px-3 pt-3 pb-0">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    selectedAgent.status === "active"
+                      ? "bg-primary animate-pulse"
+                      : selectedAgent.status === "complete"
+                        ? "bg-status-done"
+                        : "bg-muted-foreground"
+                  }`}
+                />
+                <span className="text-sm font-medium">{selectedAgent.spec.role}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setSelectedAgentId(null)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+            <AgentDetail
+              spec={selectedAgent.spec}
+              status={selectedAgent.status}
+              thinking={selectedAgent.thinking}
+              output={selectedAgent.output}
+            />
           </div>
         </div>
+      )}
 
-        {/* Main */}
-        <div className="flex flex-1 flex-col">
-          <div className="flex flex-1 overflow-hidden">
-            <div className="flex-1">
-              {active.agents.size === 0 && !isActive ? (
-                <div className="flex h-full items-center justify-center">
-                  <p className="text-sm text-text-3">
-                    Enter a task to get started.
-                  </p>
-                </div>
-              ) : (
-                <AgentCanvas
-                  agents={active.agents}
-                  selectedAgentId={selectedAgentId}
-                  onSelectAgent={setSelectedAgentId}
-                />
-              )}
-            </div>
-
-            {selectedAgent && (
-              <div className="w-72 border-l border-line">
-                <AgentDetail
-                  spec={selectedAgent.spec}
-                  status={selectedAgent.status}
-                  thinking={selectedAgent.thinking}
-                  output={selectedAgent.output}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="h-32 border-t border-line bg-surface">
+      {/* Event log — floating bottom */}
+      {hasContent && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+          <div className="pointer-events-auto ml-[21rem] mr-3 mb-3 h-28 overflow-hidden rounded-xl border border-border/60 bg-background/80 shadow-lg backdrop-blur-xl">
             <EventLog events={active.events} />
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
