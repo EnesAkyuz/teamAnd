@@ -146,10 +146,6 @@ export default function Home() {
               onDelete={bucket.deleteItem}
               onOptimize={live.envSpec ? handleOptimize : undefined}
               isOptimizing={isOptimizing}
-              onSeedTools={async () => {
-                await fetch("/api/bucket/seed-tools", { method: "POST" });
-                bucket.refetch();
-              }}
             />
           </div>
         )}

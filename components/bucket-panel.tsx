@@ -32,7 +32,6 @@ interface BucketPanelProps {
   onDelete: (id: string) => void;
   onOptimize?: () => void;
   isOptimizing?: boolean;
-  onSeedTools?: () => Promise<void>;
 }
 
 const SECTIONS: {
@@ -56,7 +55,6 @@ export function BucketPanel({
   onDelete,
   onOptimize,
   isOptimizing,
-  onSeedTools,
 }: BucketPanelProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -112,7 +110,6 @@ export function BucketPanel({
                   onAdd={(label, content) => onAdd(section.key, label, content)}
                   onAddItems={(items) => onAddItems(items.map((i) => ({ ...i, category: section.key })))}
                   onDelete={onDelete}
-                  onSeed={section.key === "tool" ? onSeedTools : undefined}
                 />
               ))
             )}
@@ -129,18 +126,15 @@ function BucketSection({
   onAdd,
   onAddItems,
   onDelete,
-  onSeed,
 }: {
   section: (typeof SECTIONS)[number];
   items: BucketItem[];
   onAdd: (label: string, content?: string) => void;
   onAddItems: (items: { label: string; content?: string }[]) => void;
   onDelete: (id: string) => void;
-  onSeed?: () => Promise<void>;
 }) {
   const [sectionOpen, setSectionOpen] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [genPrompt, setGenPrompt] = useState("");
   const [input, setInput] = useState("");
@@ -258,24 +252,7 @@ function BucketSection({
               </div>
             ))}
             {items.length === 0 && !adding && (
-              <>
-                <span className="text-[10px] text-muted-foreground/50">None yet</span>
-                {onSeed && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    className="ml-1 text-[10px]"
-                    onClick={async () => {
-                      setSeeding(true);
-                      try { await onSeed(); } finally { setSeeding(false); }
-                    }}
-                    disabled={seeding}
-                  >
-                    {seeding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                    Load available
-                  </Button>
-                )}
-              </>
+              <span className="text-[10px] text-muted-foreground/50">None yet</span>
             )}
           </div>
 
