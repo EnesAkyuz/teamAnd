@@ -36,6 +36,13 @@ export default function Home() {
     setMode("live");
   }, [env.activeEnvId]);
 
+  // Auto-load the active config's spec onto the canvas
+  useEffect(() => {
+    if (env.activeConfig?.spec) {
+      live.loadSpec(env.activeConfig.spec);
+    }
+  }, [env.activeConfig]);
+
   const activeAgents = mode === "live" ? live.agents : replay.agents;
   const activeEvents = mode === "live" ? live.events : replay.events;
   const activeEnvSpec = mode === "live" ? live.envSpec : replay.envSpec;
