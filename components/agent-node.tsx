@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Loader2, Check, Circle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Loader2, Check, Circle, Shield, Star, Wrench, Zap } from "lucide-react";
 import type { AgentSpec, AgentStatus, BucketCategory } from "@/lib/types";
 
 interface AgentNodeData {
@@ -19,6 +18,12 @@ interface AgentNodeData {
 export function AgentNodeComponent({ data }: NodeProps) {
   const { spec, status, selected, onDropBucketItem } = data as unknown as AgentNodeData;
   const [isDropTarget, setIsDropTarget] = useState(false);
+
+  const hasResources =
+    spec.skills.length > 0 ||
+    spec.values.length > 0 ||
+    spec.tools.length > 0 ||
+    spec.rules.length > 0;
 
   return (
     <>
@@ -45,7 +50,7 @@ export function AgentNodeComponent({ data }: NodeProps) {
           onDropBucketItem(spec.id, item.category, item.label);
         }}
         className={`
-          min-w-[200px] max-w-[250px] rounded-xl border bg-background/90 p-3 backdrop-blur-md transition-all duration-200
+          min-w-[210px] max-w-[270px] rounded-xl border bg-background/90 p-3 backdrop-blur-md transition-all duration-200
           ${status === "active" ? "border-primary/40 shadow-md shadow-primary/5" : "border-border/60 shadow-sm"}
           ${status === "complete" ? "border-status-done/30" : ""}
           ${status === "pending" ? "opacity-60" : ""}
@@ -53,17 +58,18 @@ export function AgentNodeComponent({ data }: NodeProps) {
           ${isDropTarget ? "ring-2 ring-primary/50 border-primary/60 scale-[1.02]" : ""}
         `}
       >
+        {/* Header */}
         <div className="flex items-center gap-2">
           {status === "active" && (
-            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
           )}
           {status === "complete" && (
-            <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-status-done">
+            <div className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-status-done">
               <Check className="h-2 w-2 text-white" strokeWidth={3} />
             </div>
           )}
           {status === "pending" && (
-            <Circle className="h-3 w-3 text-muted-foreground" />
+            <Circle className="h-3 w-3 shrink-0 text-muted-foreground" />
           )}
           <span className="text-xs font-medium">{spec.role}</span>
         </div>
@@ -72,17 +78,13 @@ export function AgentNodeComponent({ data }: NodeProps) {
           {spec.personality}
         </p>
 
-        {spec.tools.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {spec.tools.map((tool) => (
-              <Badge
-                key={tool}
-                variant="secondary"
-                className="h-4 px-1.5 text-[9px] font-normal"
-              >
-                {tool}
-              </Badge>
-            ))}
+        {/* All assigned resources */}
+        {hasResources && (
+          <div className="mt-2 space-y-1">
+            <ResourceRow icon={Zap} color="text-primary" items={spec.skills} />
+            <ResourceRow icon={Star} color="text-warn" items={spec.values} />
+            <ResourceRow icon={Shield} color="text-destructive" items={spec.rules} />
+            <ResourceRow icon={Wrench} color="text-muted-foreground" items={spec.tools} />
           </div>
         )}
       </div>
@@ -92,5 +94,33 @@ export function AgentNodeComponent({ data }: NodeProps) {
         className="!h-1.5 !w-1.5 !rounded-full !border !border-border !bg-background"
       />
     </>
+  );
+}
+
+function ResourceRow({
+  icon: Icon,
+  color,
+  items,
+}: {
+  icon: typeof Zap;
+  color: string;
+  items: string[];
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="flex items-start gap-1">
+      <Icon className={`mt-0.5 h-2.5 w-2.5 shrink-0 ${color}`} />
+      <div className="flex flex-wrap gap-0.5">
+        {items.map((item) => (
+          <span
+            key={item}
+            className="rounded bg-muted/60 px-1 py-px text-[8px] leading-tight text-muted-foreground"
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
