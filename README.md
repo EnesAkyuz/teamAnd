@@ -2,7 +2,8 @@
 
 **AI designs and runs its own team.** You give it a goal, configure the resources, and watch specialized agents think and collaborate in real-time on a visual canvas.
 
-![Hero Screenshot](docs/screenshots/hero.png)
+<img width="3358" height="1924" alt="image" src="https://github.com/user-attachments/assets/f8da3b3f-ccd4-416f-8edc-47c51a90d75a" />
+
 
 ---
 
@@ -27,46 +28,43 @@ You control the *environment* (what resources are available). The AI controls th
 ### Canvas with Agent Topology
 The main workspace. Agents appear as nodes with their assigned resources visible. Edges show dependencies. Active agents glow, completed agents turn green.
 
-![Canvas](docs/screenshots/canvas.png)
+<img width="3360" height="1926" alt="image" src="https://github.com/user-attachments/assets/618c85a6-d569-4db1-89c8-df2fe42a47e4" />
 
 ### Environment Bucket
 Pre-configure rules, skills, values, and tools. AI generators can create these for you. Drag items from the bucket onto agent nodes.
 
-![Bucket](docs/screenshots/bucket.png)
+<img width="3360" height="1928" alt="image" src="https://github.com/user-attachments/assets/3860c92d-5313-4be3-b22f-cc7e4dc71a03" />
 
 ### Chat Panel — Design & Run
 Multi-turn chat for designing teams and editing configs. Separate "Edit Config" and "Run Agents" buttons. Type a prompt to run agents with specific instructions.
 
-![Chat Panel](docs/screenshots/chat-panel.png)
+<img width="3360" height="1920" alt="image" src="https://github.com/user-attachments/assets/83df6d16-1912-4d29-a3e5-0207d3d929cc" />
 
 ### Agent Detail Panel
 Click any agent node to see its full config, streaming thought traces, and markdown-rendered output. Edit skills/values/rules/tools in-place.
 
-![Agent Detail](docs/screenshots/agent-detail.png)
+<img width="702" height="1116" alt="image" src="https://github.com/user-attachments/assets/a6219a9a-9262-489e-8e9a-1bc164c6b0b9" />
 
 ### Thinking Indicators
 Watch agents think in real-time. Collapsible thinking traces show the reasoning process. Bouncing dots indicate active work.
 
-![Thinking](docs/screenshots/thinking.png)
+<img width="620" height="490" alt="image" src="https://github.com/user-attachments/assets/c839fd6b-e876-4922-81ea-8ae42a9d63b3" />
 
 ### AI-Powered Skill Generation
 Describe what you need and the AI generates structured skill definitions with methodology, principles, and pitfalls.
 
-![Skill Generation](docs/screenshots/skill-gen.png)
+<img width="640" height="296" alt="image" src="https://github.com/user-attachments/assets/88af07c4-c4f6-4291-84ad-ae8142f483bf" />
+
 
 ### Environment Switcher
 Multiple environments with their own buckets, configs, and run history. Save team designs as named configs. Replay past runs.
 
-![Env Switcher](docs/screenshots/env-switcher.png)
+<img width="950" height="750" alt="image" src="https://github.com/user-attachments/assets/4be65cb5-452f-4baa-a807-2605935a8eeb" />
 
 ### Parallel Execution
 Agents without dependencies run simultaneously. Both show loading states and stream output independently.
 
-![Parallel](docs/screenshots/parallel.png)
-
-### Dark Mode
-
-![Dark Mode](docs/screenshots/dark-mode.png)
+<img width="3332" height="1814" alt="image" src="https://github.com/user-attachments/assets/f59a66ab-d5ed-4e2b-a8c5-150404135bd6" />
 
 ---
 
