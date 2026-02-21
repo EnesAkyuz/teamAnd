@@ -37,18 +37,21 @@ export type Database = {
       bucket_items: {
         Row: {
           category: string
+          content: string | null
           created_at: string | null
           id: string
           label: string
         }
         Insert: {
           category: string
+          content?: string | null
           created_at?: string | null
           id?: string
           label: string
         }
         Update: {
           category?: string
+          content?: string | null
           created_at?: string | null
           id?: string
           label?: string

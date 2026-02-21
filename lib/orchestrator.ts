@@ -29,7 +29,10 @@ function enforceAllowlist(spec: EnvironmentSpec, bucketItems: BucketItem[]): Env
 function formatBucketForTool(bucketItems: BucketItem[]) {
   return {
     rules: bucketItems.filter((i) => i.category === "rule").map((i) => i.label),
-    skills: bucketItems.filter((i) => i.category === "skill").map((i) => i.label),
+    skills: bucketItems.filter((i) => i.category === "skill").map((i) => ({
+      name: i.label,
+      description: i.content ? i.content.slice(0, 200) + (i.content.length > 200 ? "..." : "") : i.label,
+    })),
     values: bucketItems.filter((i) => i.category === "value").map((i) => i.label),
     tools: bucketItems.filter((i) => i.category === "tool").map((i) => i.label),
   };
@@ -229,22 +232,29 @@ export async function* editSpec(
 // Execute agents with parallel support for branching workflows
 export async function* executeAgents(
   spec: EnvironmentSpec,
+  bucketItems?: BucketItem[],
 ): AsyncGenerator<AgentEvent> {
+  // Build skill content lookup
+  const skillContent: Record<string, string> = {};
+  if (bucketItems) {
+    for (const item of bucketItems) {
+      if (item.category === "skill" && item.content) {
+        skillContent[item.label] = item.content;
+      }
+    }
+  }
+
   const completed: Record<string, string> = {};
   const levels = getExecutionLevels(spec.agents);
 
   for (const level of levels) {
-    // All agents in the same level can run in parallel
     if (level.length === 1) {
-      // Single agent — run directly and yield events inline
-      yield* runAgent(level[0], spec, completed);
+      yield* runAgent(level[0], spec, completed, skillContent);
     } else {
-      // Multiple agents — run in parallel, collect events, yield in order
       const agentResults = await Promise.all(
-        level.map((agent) => collectAgentRun(agent, spec, completed)),
+        level.map((agent) => collectAgentRun(agent, spec, completed, skillContent)),
       );
 
-      // Yield all collected events and update completed map
       for (const { agent, events, output } of agentResults) {
         for (const event of events) {
           yield event;
@@ -262,6 +272,7 @@ async function* runAgent(
   agent: AgentSpec,
   spec: EnvironmentSpec,
   completed: Record<string, string>,
+  skillContent: Record<string, string> = {},
 ): AsyncGenerator<AgentEvent> {
   yield { type: "agent_spawned", agent, timestamp: Date.now() };
 
@@ -273,7 +284,7 @@ async function* runAgent(
     })
     .join("\n\n");
 
-  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext);
+  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext, skillContent);
 
   const stream = client.messages.stream({
     model: "claude-sonnet-4-20250514",
@@ -323,6 +334,7 @@ async function collectAgentRun(
   agent: AgentSpec,
   spec: EnvironmentSpec,
   completed: Record<string, string>,
+  skillContent: Record<string, string> = {},
 ): Promise<{ agent: AgentSpec; events: AgentEvent[]; output: string }> {
   const events: AgentEvent[] = [];
   let output = "";
@@ -337,7 +349,7 @@ async function collectAgentRun(
     })
     .join("\n\n");
 
-  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext);
+  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext, skillContent);
 
   const stream = client.messages.stream({
     model: "claude-sonnet-4-20250514",
@@ -387,7 +399,12 @@ export async function* optimizeAgents(
   yield* editSpec(currentSpec, "Optimize the distribution of skills, tools, values, and rules across agents for maximum effectiveness.", bucketItems);
 }
 
-function buildAgentPrompt(agent: AgentSpec, globalRules: string[], upstreamContext: string): string {
+function buildAgentPrompt(
+  agent: AgentSpec,
+  globalRules: string[],
+  upstreamContext: string,
+  skillContent: Record<string, string> = {},
+): string {
   const allRules = [...agent.rules, ...globalRules];
   const parts = [`You are ${agent.role}.`, `Personality: ${agent.personality}`];
 
@@ -396,6 +413,14 @@ function buildAgentPrompt(agent: AgentSpec, globalRules: string[], upstreamConte
   if (agent.tools.length > 0) parts.push(`Available Tools: ${agent.tools.join(", ")}`);
   if (allRules.length > 0) parts.push(`Rules you MUST follow:\n${allRules.map((r) => `- ${r}`).join("\n")}`);
   if (agent.memory.length > 0) parts.push(`Memory/Context:\n${agent.memory.join("\n")}`);
+
+  // Inject full skill definitions for assigned skills
+  const injectedSkills = agent.skills
+    .filter((s) => skillContent[s])
+    .map((s) => `--- SKILL: ${s} ---\n${skillContent[s]}\n--- END SKILL ---`);
+  if (injectedSkills.length > 0) {
+    parts.push(`Skill Definitions (follow these methodologies):\n\n${injectedSkills.join("\n\n")}`);
+  }
 
   parts.push("You are part of a team. Stay focused on YOUR role. Be concise but thorough. Output your work directly.");
 

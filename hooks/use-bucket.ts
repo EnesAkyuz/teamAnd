@@ -3,6 +3,24 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { BucketCategory, BucketItem } from "@/lib/types";
 
+interface RawBucketItem {
+  id: string;
+  category: string;
+  label: string;
+  content: string | null;
+  created_at: string;
+}
+
+function mapItem(d: RawBucketItem): BucketItem {
+  return {
+    id: d.id,
+    category: d.category as BucketCategory,
+    label: d.label,
+    content: d.content,
+    createdAt: d.created_at,
+  };
+}
+
 export function useBucket() {
   const [items, setItems] = useState<BucketItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -10,32 +28,35 @@ export function useBucket() {
   useEffect(() => {
     fetch("/api/bucket")
       .then((r) => r.json())
-      .then((data) => {
-        setItems(
-          data.map((d: { id: string; category: string; label: string; created_at: string }) => ({
-            id: d.id,
-            category: d.category as BucketCategory,
-            label: d.label,
-            createdAt: d.created_at,
-          })),
-        );
-      })
+      .then((data: RawBucketItem[]) => setItems(data.map(mapItem)))
       .finally(() => setLoading(false));
   }, []);
 
-  const addItem = useCallback(async (category: BucketCategory, label: string) => {
+  const addItem = useCallback(async (category: BucketCategory, label: string, content?: string) => {
     const res = await fetch("/api/bucket", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category, label }),
+      body: JSON.stringify({ category, label, content: content ?? null }),
     });
     const data = await res.json();
     if (data.id) {
-      setItems((prev) => [
-        ...prev,
-        { id: data.id, category: data.category, label: data.label, createdAt: data.created_at },
-      ]);
+      setItems((prev) => [...prev, mapItem(data)]);
     }
+    return data;
+  }, []);
+
+  const addItems = useCallback(async (newItems: { category: BucketCategory; label: string; content?: string }[]) => {
+    const results = await Promise.all(
+      newItems.map((item) =>
+        fetch("/api/bucket", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: item.category, label: item.label, content: item.content ?? null }),
+        }).then((r) => r.json()),
+      ),
+    );
+    const created = results.filter((d) => d.id).map(mapItem);
+    setItems((prev) => [...prev, ...created]);
   }, []);
 
   const updateItem = useCallback(async (id: string, label: string) => {
@@ -62,5 +83,5 @@ export function useBucket() {
     [items],
   );
 
-  return { items, grouped, loading, addItem, updateItem, deleteItem };
+  return { items, grouped, loading, addItem, addItems, updateItem, deleteItem };
 }

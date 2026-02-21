@@ -55,6 +55,7 @@ export interface BucketItem {
   id: string;
   category: BucketCategory;
   label: string;
+  content?: string | null;
   createdAt: string;
 }
 

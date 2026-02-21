@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       case "edit":
         return editSpec(spec, task, bucketItems ?? []);
       case "execute":
-        return executeAgents(spec);
+        return executeAgents(spec, bucketItems);
       default:
         throw new Error(`Unknown action: ${action}`);
     }

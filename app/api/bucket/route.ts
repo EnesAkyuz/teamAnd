@@ -10,11 +10,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { category, label } = await request.json();
+  const { category, label, content } = await request.json();
 
   const { data, error } = await supabase
     .from("bucket_items")
-    .insert({ category, label })
+    .insert({ category, label, content: content ?? null })
     .select()
     .single();
 

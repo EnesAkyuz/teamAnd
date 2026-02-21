@@ -103,6 +103,7 @@ export default function Home() {
             grouped={bucket.grouped}
             loading={bucket.loading}
             onAdd={bucket.addItem}
+            onAddItems={bucket.addItems}
             onDelete={bucket.deleteItem}
             onOptimize={live.envSpec ? handleOptimize : undefined}
             isOptimizing={isOptimizing}
@@ -164,7 +165,7 @@ export default function Home() {
               hasSpec={!!live.envSpec}
               onDesign={(msg) => live.design(msg, bucket.items)}
               onEdit={(msg) => live.edit(msg, bucket.items)}
-              onExecute={live.execute}
+              onExecute={() => live.execute(bucket.items)}
               onStop={live.stop}
             />
           </DraggablePanel>
