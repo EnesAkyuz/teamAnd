@@ -1,26 +1,254 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-brand: var(--brand);
+  --color-brand-muted: var(--brand-muted);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-accent-warm: var(--accent-warm);
+  --color-accent-warm-muted: var(--accent-warm-muted);
+  --color-accent-green: var(--accent-green);
+  --color-accent-green-muted: var(--accent-green-muted);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-purple-muted: var(--accent-purple-muted);
+  --color-accent-amber: var(--accent-amber);
+  --color-accent-amber-muted: var(--accent-amber-muted);
+  --color-accent-rose: var(--accent-rose);
+  --color-accent-rose-muted: var(--accent-rose-muted);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Light — warm parchment Anthropic palette */
+:root {
+  --radius: 0.625rem;
+  --background: #faf8f5;
+  --foreground: #1a1714;
+  --surface: #ffffff;
+  --surface-raised: #f5f2ed;
+  --brand: #c4642d;
+  --brand-muted: #c4642d1a;
+  --text-primary: #1a1714;
+  --text-secondary: #6b635a;
+  --text-tertiary: #9c9489;
+  --border-subtle: #e8e4de;
+  --border-default: #d4cfc7;
+  --accent-warm: #c4642d;
+  --accent-warm-muted: #c4642d14;
+  --accent-green: #2d7d46;
+  --accent-green-muted: #2d7d4614;
+  --accent-purple: #7c5cbf;
+  --accent-purple-muted: #7c5cbf14;
+  --accent-amber: #a6841a;
+  --accent-amber-muted: #a6841a14;
+  --accent-rose: #b8445a;
+  --accent-rose-muted: #b8445a14;
+
+  --card: #ffffff;
+  --card-foreground: #1a1714;
+  --popover: #ffffff;
+  --popover-foreground: #1a1714;
+  --primary: #c4642d;
+  --primary-foreground: #faf8f5;
+  --secondary: #f5f2ed;
+  --secondary-foreground: #1a1714;
+  --muted: #f5f2ed;
+  --muted-foreground: #6b635a;
+  --accent: #f5f2ed;
+  --accent-foreground: #1a1714;
+  --destructive: #b8445a;
+  --border: #e8e4de;
+  --input: #e8e4de;
+  --ring: #c4642d;
+  --chart-1: #c4642d;
+  --chart-2: #2d7d46;
+  --chart-3: #7c5cbf;
+  --chart-4: #a6841a;
+  --chart-5: #b8445a;
+  --sidebar: #f5f2ed;
+  --sidebar-foreground: #1a1714;
+  --sidebar-primary: #c4642d;
+  --sidebar-primary-foreground: #faf8f5;
+  --sidebar-accent: #f5f2ed;
+  --sidebar-accent-foreground: #1a1714;
+  --sidebar-border: #e8e4de;
+  --sidebar-ring: #c4642d;
+}
+
+/* Dark — deep warm charcoal */
+.dark {
+  --background: #161412;
+  --foreground: #ede9e3;
+  --surface: #1e1b18;
+  --surface-raised: #262320;
+  --brand: #d4845a;
+  --brand-muted: #d4845a1a;
+  --text-primary: #ede9e3;
+  --text-secondary: #a09890;
+  --text-tertiary: #6b635a;
+  --border-subtle: #2e2a26;
+  --border-default: #3d3833;
+  --accent-warm: #d4845a;
+  --accent-warm-muted: #d4845a1a;
+  --accent-green: #5cb87a;
+  --accent-green-muted: #5cb87a1a;
+  --accent-purple: #a08ad4;
+  --accent-purple-muted: #a08ad41a;
+  --accent-amber: #d4b85c;
+  --accent-amber-muted: #d4b85c1a;
+  --accent-rose: #d4747e;
+  --accent-rose-muted: #d4747e1a;
+
+  --card: #1e1b18;
+  --card-foreground: #ede9e3;
+  --popover: #1e1b18;
+  --popover-foreground: #ede9e3;
+  --primary: #d4845a;
+  --primary-foreground: #161412;
+  --secondary: #262320;
+  --secondary-foreground: #ede9e3;
+  --muted: #262320;
+  --muted-foreground: #a09890;
+  --accent: #262320;
+  --accent-foreground: #ede9e3;
+  --destructive: #d4747e;
+  --border: #2e2a26;
+  --input: #2e2a26;
+  --ring: #d4845a;
+  --chart-1: #d4845a;
+  --chart-2: #5cb87a;
+  --chart-3: #a08ad4;
+  --chart-4: #d4b85c;
+  --chart-5: #d4747e;
+  --sidebar: #1e1b18;
+  --sidebar-foreground: #ede9e3;
+  --sidebar-primary: #d4845a;
+  --sidebar-primary-foreground: #161412;
+  --sidebar-accent: #262320;
+  --sidebar-accent-foreground: #ede9e3;
+  --sidebar-border: #2e2a26;
+  --sidebar-ring: #d4845a;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Agent node glow — warm terracotta */
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes gentle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+.animate-gentle-float {
+  animation: gentle-float 3s ease-in-out infinite;
+}
+
+/* React Flow overrides for warm theme */
+.react-flow__background {
+  background: var(--background) !important;
+}
+
+.react-flow__controls {
+  border-radius: 8px !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+  overflow: hidden !important;
+}
+
+.react-flow__controls-button {
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  fill: var(--text-secondary) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--surface-raised) !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--border-default) !important;
+}
+
+.react-flow__minimap {
+  border-radius: 8px !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+/* Noise texture overlay for depth */
+.noise-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
 }
