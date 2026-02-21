@@ -8,6 +8,8 @@ interface RawBucketItem {
   category: string;
   label: string;
   content: string | null;
+  alignment: string | null;
+  alignment_reason: string | null;
   created_at: string;
 }
 
@@ -17,6 +19,8 @@ function mapItem(d: RawBucketItem): BucketItem {
     category: d.category as BucketCategory,
     label: d.label,
     content: d.content,
+    alignment: d.alignment as BucketItem["alignment"],
+    alignmentReason: d.alignment_reason,
     createdAt: d.created_at,
   };
 }

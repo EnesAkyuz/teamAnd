@@ -34,8 +34,37 @@ export type Database = {
   }
   public: {
     Tables: {
+      alignment_messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          role: string
+          thinking: string | null
+          tool_calls: Json | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          role: string
+          thinking?: string | null
+          tool_calls?: Json | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          role?: string
+          thinking?: string | null
+          tool_calls?: Json | null
+        }
+        Relationships: []
+      }
       bucket_items: {
         Row: {
+          alignment: string | null
+          alignment_reason: string | null
           category: string
           content: string | null
           created_at: string | null
@@ -44,6 +73,8 @@ export type Database = {
           label: string
         }
         Insert: {
+          alignment?: string | null
+          alignment_reason?: string | null
           category: string
           content?: string | null
           created_at?: string | null
@@ -52,6 +83,8 @@ export type Database = {
           label: string
         }
         Update: {
+          alignment?: string | null
+          alignment_reason?: string | null
           category?: string
           content?: string | null
           created_at?: string | null
@@ -220,6 +253,24 @@ export type Database = {
           environment_spec?: Json | null
           id?: string
           task?: string
+        }
+        Relationships: []
+      }
+      user_profile: {
+        Row: {
+          id: string
+          preferences: Json
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          preferences?: Json
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          preferences?: Json
+          updated_at?: string | null
         }
         Relationships: []
       }

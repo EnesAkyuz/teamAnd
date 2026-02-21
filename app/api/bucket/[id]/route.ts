@@ -5,11 +5,15 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const { label } = await request.json();
+  const body = await request.json();
+  const update: Record<string, unknown> = {};
+  if (body.label !== undefined) update.label = body.label;
+  if (body.alignment !== undefined) update.alignment = body.alignment;
+  if (body.alignment_reason !== undefined) update.alignment_reason = body.alignment_reason;
 
   const { error } = await supabase
     .from("bucket_items")
-    .update({ label })
+    .update(update)
     .eq("id", id);
 
   if (error) return Response.json({ error: error.message }, { status: 400 });

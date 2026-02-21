@@ -51,11 +51,15 @@ export type AgentStatus = "pending" | "active" | "complete";
 
 export type BucketCategory = "rule" | "skill" | "value" | "tool";
 
+export type AlignmentStatus = "favorable" | "conflicting" | "neutral";
+
 export interface BucketItem {
   id: string;
   category: BucketCategory;
   label: string;
   content?: string | null;
+  alignment?: AlignmentStatus | null;
+  alignmentReason?: string | null;
   createdAt: string;
 }
 
