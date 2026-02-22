@@ -9,6 +9,7 @@ import {
   Package,
   Plus,
   Search,
+  Brain,
   Shield,
   Sparkles,
   Star,
@@ -28,6 +29,7 @@ interface BucketPanelProps {
     skills: BucketItem[];
     values: BucketItem[];
     tools: BucketItem[];
+    memorys: BucketItem[];
   };
   loading: boolean;
   onAdd: (category: BucketCategory, label: string, content?: string) => void;
@@ -48,6 +50,7 @@ const SECTIONS: {
   { key: "skill", label: "Skills", icon: Zap, color: "text-primary", canGenerate: true },
   { key: "value", label: "Values", icon: Star, color: "text-warn", canGenerate: true },
   { key: "tool", label: "Tools", icon: Wrench, color: "text-muted-foreground", canGenerate: false },
+  { key: "memory", label: "Memory", icon: Brain, color: "text-thinking", canGenerate: false },
 ];
 
 export function BucketPanel({
@@ -66,7 +69,7 @@ export function BucketPanel({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const totalCount =
-    grouped.rules.length + grouped.skills.length + grouped.values.length + grouped.tools.length;
+    grouped.rules.length + grouped.skills.length + grouped.values.length + grouped.tools.length + grouped.memorys.length;
 
   useEffect(() => {
     if (!open) return;

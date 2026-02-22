@@ -46,6 +46,7 @@ const CATEGORIES: { key: BucketCategory | "all"; label: string; icon?: typeof Sh
   { key: "skill", label: "Skills", icon: Zap, color: "text-primary" },
   { key: "value", label: "Values", icon: Star, color: "text-warn" },
   { key: "tool", label: "Tools", icon: Wrench, color: "text-muted-foreground" },
+  { key: "memory", label: "Memory", icon: Brain, color: "text-thinking" },
 ];
 
 const ALIGNMENT_FILTERS: { key: AlignmentStatus | "all" | "unreviewed"; label: string }[] = [
@@ -71,6 +72,7 @@ function categoryIcon(cat: BucketCategory) {
     case "skill": return <Zap className="h-3 w-3 text-primary" />;
     case "value": return <Star className="h-3 w-3 text-warn" />;
     case "tool": return <Wrench className="h-3 w-3 text-muted-foreground" />;
+    case "memory": return <Brain className="h-3 w-3 text-thinking" />;
   }
 }
 

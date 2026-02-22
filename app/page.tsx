@@ -56,12 +56,13 @@ export default function Home() {
   const hasContent = activeAgents.size > 0 || isBusy;
 
   const categoryToField = useCallback(
-    (cat: BucketCategory): "skills" | "values" | "tools" | "rules" => {
+    (cat: BucketCategory): "skills" | "values" | "tools" | "rules" | null => {
       switch (cat) {
         case "skill": return "skills";
         case "value": return "values";
         case "tool": return "tools";
         case "rule": return "rules";
+        case "memory": return null;
       }
     },
     [],
@@ -69,7 +70,8 @@ export default function Home() {
 
   const handleDropBucketItem = useCallback(
     (agentId: string, category: BucketCategory, label: string) => {
-      live.updateAgentConfig(agentId, "add", categoryToField(category), label);
+      const field = categoryToField(category);
+      if (field) live.updateAgentConfig(agentId, "add", field, label);
     },
     [live.updateAgentConfig, categoryToField],
   );
@@ -251,7 +253,7 @@ export default function Home() {
                 onDesign={(msg) => live.design(msg, bucket.items)}
                 onEdit={(msg) => live.edit(msg, bucket.items)}
                 onExecute={(prompt) => {
-                  live.execute(bucket.items, prompt, env.activeConfigId ?? undefined);
+                  live.execute(bucket.items, prompt, env.activeConfigId ?? undefined, env.activeEnvId ?? undefined);
                   // Refresh runs after a delay
                   setTimeout(() => env.refreshRuns(), 2000);
                 }}

@@ -5,7 +5,7 @@ import type { Json } from "@/lib/database.types";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const { action, task, spec, bucketItems, prompt, configId } = await request.json();
+  const { action, task, spec, bucketItems, prompt, configId, environmentId } = await request.json();
 
   const encoder = new TextEncoder();
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       case "edit":
         return editSpec(spec, task, bucketItems ?? []);
       case "execute":
-        return executeAgents(spec, bucketItems, prompt);
+        return executeAgents(spec, bucketItems, prompt, environmentId);
       default:
         throw new Error(`Unknown action: ${action}`);
     }

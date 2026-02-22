@@ -89,6 +89,7 @@ export function useBucket(environmentId: string | null) {
       skills: items.filter((i) => i.category === "skill"),
       values: items.filter((i) => i.category === "value"),
       tools: items.filter((i) => i.category === "tool"),
+      memorys: items.filter((i) => i.category === "memory"),
     }),
     [items],
   );

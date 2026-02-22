@@ -1,7 +1,29 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentEvent, AgentSpec, BucketItem, EnvironmentSpec } from "./types";
+import { supabase } from "./supabase";
 
 const client = new Anthropic();
+
+// Memory update tool — available to all agents during execution
+const MEMORY_TOOL: Anthropic.Tool = {
+  name: "update_memory",
+  description:
+    "Save a memory fragment — a learning, observation, insight, or note from your work. This persists across runs so you (and your team) can build on it later. Use this to record important findings, decisions, or context that would be valuable to remember.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      content: {
+        type: "string",
+        description: "The memory content to save — what you learned or observed",
+      },
+      label: {
+        type: "string",
+        description: "A short label/title for this memory (e.g. 'API rate limits', 'User prefers formal tone')",
+      },
+    },
+    required: ["content", "label"],
+  },
+};
 
 // Pre-available tools that map to real Claude API server-side tools
 // These are the tools that can be added to the bucket and assigned to agents
@@ -261,13 +283,24 @@ export async function* executeAgents(
   spec: EnvironmentSpec,
   bucketItems?: BucketItem[],
   userPrompt?: string,
+  environmentId?: string,
 ): AsyncGenerator<AgentEvent> {
   // Build skill content lookup
   const skillContent: Record<string, string> = {};
+  // Build memory fragments lookup by agent role
+  const memoryFragments: Record<string, string[]> = {};
   if (bucketItems) {
     for (const item of bucketItems) {
       if (item.category === "skill" && item.content) {
         skillContent[item.label] = item.content;
+      }
+      if (item.category === "memory" && item.content) {
+        // Memory labels are formatted as "AgentRole: label"
+        const role = item.label.split(":")[0]?.trim();
+        if (role) {
+          if (!memoryFragments[role]) memoryFragments[role] = [];
+          memoryFragments[role].push(`[${item.label}]: ${item.content}`);
+        }
       }
     }
   }
@@ -277,9 +310,9 @@ export async function* executeAgents(
 
   for (const level of levels) {
     if (level.length === 1) {
-      yield* runAgent(level[0], spec, completed, skillContent, userPrompt);
+      yield* runAgent(level[0], spec, completed, skillContent, userPrompt, environmentId, memoryFragments);
     } else {
-      yield* runAgentsParallel(level, spec, completed, skillContent, userPrompt);
+      yield* runAgentsParallel(level, spec, completed, skillContent, userPrompt, environmentId, memoryFragments);
     }
   }
 
@@ -325,6 +358,8 @@ async function* runAgentsParallel(
   completed: Record<string, string>,
   skillContent: Record<string, string>,
   userPrompt?: string,
+  environmentId?: string,
+  memoryFragments?: Record<string, string[]>,
 ): AsyncGenerator<AgentEvent> {
   // Shared event queue
   const queue: AgentEvent[] = [];
@@ -341,7 +376,7 @@ async function* runAgentsParallel(
 
   // Launch all agents concurrently, each pushing events to queue
   const promises = agents.map(async (agent) => {
-    const gen = runAgent(agent, spec, completed, skillContent, userPrompt);
+    const gen = runAgent(agent, spec, completed, skillContent, userPrompt, environmentId, memoryFragments);
     const events: AgentEvent[] = [];
     let output = "";
 
@@ -381,6 +416,8 @@ async function* runAgent(
   completed: Record<string, string>,
   skillContent: Record<string, string> = {},
   userPrompt?: string,
+  environmentId?: string,
+  memoryFragments?: Record<string, string[]>,
 ): AsyncGenerator<AgentEvent> {
   yield { type: "agent_spawned", agent, timestamp: Date.now() };
 
@@ -392,48 +429,112 @@ async function* runAgent(
     })
     .join("\n\n");
 
-  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext, skillContent);
-  const tools = resolveTools(agent.tools);
+  const systemPrompt = buildAgentPrompt(agent, spec.rules, upstreamContext, skillContent, memoryFragments);
+  const serverTools = resolveTools(agent.tools);
+  // All agents get the memory tool + their assigned server tools
+  const allTools: Anthropic.Tool[] = [MEMORY_TOOL, ...serverTools];
 
-  const streamOpts: Record<string, unknown> = {
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 16000,
-    thinking: { type: "enabled", budget_tokens: 8000 },
-    system: systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: `Task: ${spec.objective}${userPrompt ? `\n\nUser prompt: ${userPrompt}` : ""}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
-      },
-    ],
-  };
-  if (tools.length > 0) {
-    streamOpts.tools = tools;
-  }
-
-  const stream = client.messages.stream(streamOpts as Parameters<typeof client.messages.stream>[0]);
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content: `Task: ${spec.objective}${userPrompt ? `\n\nUser prompt: ${userPrompt}` : ""}\n\nYour specific role: ${agent.role}\nYour goal: Execute your responsibilities for this task.\n${upstreamContext ? `\nContext from team members:\n${upstreamContext}` : ""}`,
+    },
+  ];
 
   let fullOutput = "";
+  const maxTurns = 5; // safety limit for tool use loops
 
-  for await (const event of stream) {
-    if (event.type === "content_block_delta") {
-      if (event.delta.type === "thinking_delta") {
-        yield { type: "thinking", agentId: agent.id, content: event.delta.thinking, timestamp: Date.now() };
-      } else if (event.delta.type === "text_delta") {
-        fullOutput += event.delta.text;
-        yield { type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() };
+  for (let turn = 0; turn < maxTurns; turn++) {
+    const streamOpts: Record<string, unknown> = {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 16000,
+      thinking: { type: "enabled", budget_tokens: 8000 },
+      system: systemPrompt,
+      tools: allTools,
+      messages,
+    };
+
+    const stream = client.messages.stream(streamOpts as Parameters<typeof client.messages.stream>[0]);
+
+    let turnText = "";
+
+    for await (const event of stream) {
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "thinking_delta") {
+          yield { type: "thinking", agentId: agent.id, content: event.delta.thinking, timestamp: Date.now() };
+        } else if (event.delta.type === "text_delta") {
+          turnText += event.delta.text;
+          yield { type: "output", agentId: agent.id, content: event.delta.text, timestamp: Date.now() };
+        }
+      }
+      // Emit tool_call events for visibility (server tools)
+      if (event.type === "content_block_start" && (event as unknown as { content_block: { type: string; name: string } }).content_block.type === "server_tool_use") {
+        yield {
+          type: "tool_call",
+          agentId: agent.id,
+          tool: (event as unknown as { content_block: { name: string } }).content_block.name,
+          input: "",
+          timestamp: Date.now(),
+        };
       }
     }
-    // Emit tool_call events for visibility
-    if (event.type === "content_block_start" && (event as unknown as { content_block: { type: string; name: string } }).content_block.type === "server_tool_use") {
+
+    fullOutput += turnText;
+
+    // Check for tool_use blocks (update_memory)
+    const finalMessage = await stream.finalMessage();
+    const toolUseBlocks = finalMessage.content.filter(
+      (b): b is Anthropic.ContentBlock & { type: "tool_use"; id: string; name: string; input: Record<string, string> } =>
+        b.type === "tool_use" && b.name === "update_memory",
+    );
+
+    if (toolUseBlocks.length === 0) {
+      // No memory tool calls — done with this agent
+      break;
+    }
+
+    // Handle memory tool calls
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const toolUse of toolUseBlocks) {
+      const { content, label } = toolUse.input;
+      const memoryLabel = `${agent.role}: ${label}`;
+
+      // Save to bucket
+      if (environmentId) {
+        await supabase.from("bucket_items").insert({
+          environment_id: environmentId,
+          category: "memory",
+          label: memoryLabel,
+          content,
+        });
+      }
+
+      yield {
+        type: "memory_update",
+        agentId: agent.id,
+        label: memoryLabel,
+        content,
+        timestamp: Date.now(),
+      };
+
       yield {
         type: "tool_call",
         agentId: agent.id,
-        tool: (event as unknown as { content_block: { name: string } }).content_block.name,
-        input: "",
+        tool: "update_memory",
+        input: label,
         timestamp: Date.now(),
       };
+
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: `Memory saved: "${memoryLabel}"`,
+      });
     }
+
+    // Continue conversation with tool results
+    messages.push({ role: "assistant", content: finalMessage.content });
+    messages.push({ role: "user", content: toolResults });
   }
 
   completed[agent.id] = fullOutput;
@@ -466,6 +567,7 @@ function buildAgentPrompt(
   globalRules: string[],
   upstreamContext: string,
   skillContent: Record<string, string> = {},
+  memoryFragments?: Record<string, string[]>,
 ): string {
   const allRules = [...agent.rules, ...globalRules];
   const parts = [`You are ${agent.role}.`, `Personality: ${agent.personality}`];
@@ -474,7 +576,14 @@ function buildAgentPrompt(
   if (agent.values.length > 0) parts.push(`Values: ${agent.values.join(", ")}`);
   if (agent.tools.length > 0) parts.push(`Available Tools: ${agent.tools.join(", ")}`);
   if (allRules.length > 0) parts.push(`Rules you MUST follow:\n${allRules.map((r) => `- ${r}`).join("\n")}`);
-  if (agent.memory.length > 0) parts.push(`Memory/Context:\n${agent.memory.join("\n")}`);
+
+  // Combine design-time memory with persisted memory fragments
+  const allMemory = [...agent.memory];
+  const fragments = memoryFragments?.[agent.role];
+  if (fragments) allMemory.push(...fragments);
+  if (allMemory.length > 0) parts.push(`Memory/Context:\n${allMemory.join("\n")}`);
+
+  parts.push(`You have the update_memory tool. Use it to save important learnings, observations, or insights that would be valuable to remember for future runs.`);
 
   // Inject full skill definitions for assigned skills
   const injectedSkills = agent.skills

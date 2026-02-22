@@ -238,7 +238,7 @@ export function useOrchestrate() {
   }, [envSpec, processEvent]);
 
   // Execute the current spec (run agents)
-  const execute = useCallback(async (bucketItems?: BucketItem[], prompt?: string, configId?: string) => {
+  const execute = useCallback(async (bucketItems?: BucketItem[], prompt?: string, configId?: string, environmentId?: string) => {
     if (!envSpec) return;
 
     setRunPrompt(prompt ?? envSpec.objective);
@@ -261,7 +261,7 @@ export function useOrchestrate() {
 
     try {
       await streamSSE(
-        { action: "execute", spec: envSpec, bucketItems, prompt, configId },
+        { action: "execute", spec: envSpec, bucketItems, prompt, configId, environmentId },
         abort.signal,
         processEvent,
       );

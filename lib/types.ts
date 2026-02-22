@@ -46,11 +46,12 @@ export type AgentEvent =
     }
   | { type: "synthesis"; content: string; timestamp: number }
   | { type: "environment_complete"; summary: string; timestamp: number }
+  | { type: "memory_update"; agentId: string; label: string; content: string; timestamp: number }
   | { type: "error"; message: string; timestamp: number };
 
 export type AgentStatus = "pending" | "active" | "complete";
 
-export type BucketCategory = "rule" | "skill" | "value" | "tool";
+export type BucketCategory = "rule" | "skill" | "value" | "tool" | "memory";
 
 export type AlignmentStatus = "favorable" | "conflicting" | "neutral";
 
