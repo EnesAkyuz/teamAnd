@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 import {
   ArrowLeft,
   Brain,
@@ -10,6 +11,8 @@ import {
   ChevronRight,
   Copy,
   Loader2,
+  Mic,
+  MicOff,
   Search,
   Send,
   Shield,
@@ -90,6 +93,7 @@ export default function RegistryPage() {
   const [isChatting, setIsChatting] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const alignVoice = useVoiceInput(useCallback((text: string) => setChatInput(text), []));
 
   // Load chat history from DB
   useEffect(() => {
@@ -591,6 +595,15 @@ export default function RegistryPage() {
                 className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs focus:border-primary/40 focus:outline-none"
                 disabled={isChatting}
               />
+              {alignVoice.isSupported && (
+                <Button
+                  size="icon-sm"
+                  variant={alignVoice.isListening ? "destructive" : "outline"}
+                  onClick={alignVoice.toggle}
+                >
+                  {alignVoice.isListening ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                </Button>
+              )}
               <Button size="icon-sm" onClick={() => chatInput.trim() && sendChat(chatInput.trim())} disabled={!chatInput.trim() || isChatting}>
                 {isChatting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
               </Button>

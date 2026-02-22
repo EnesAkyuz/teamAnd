@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Brain,
   ChevronDown,
   ChevronRight,
   Maximize2,
+  Mic,
+  MicOff,
   Minimize2,
   Pencil,
   Play,
@@ -16,6 +18,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 
 export interface ChatMessage {
   id: string;
@@ -61,6 +64,11 @@ export function ChatPanel({
   }, [messages, plannerThinking, plannerOutput]);
 
   const isBusy = isDesigning || isRunning;
+
+  const handleVoiceTranscript = useCallback((text: string) => {
+    setInput(text);
+  }, []);
+  const voice = useVoiceInput(handleVoiceTranscript);
 
   const handleSubmit = () => {
     if (!input.trim() || isBusy) return;
@@ -168,17 +176,25 @@ export function ChatPanel({
 
         {/* Action buttons */}
         <div className="flex items-center gap-1.5">
+          {voice.isSupported && (
+            <Button
+              size="sm"
+              variant={voice.isListening ? "destructive" : "outline"}
+              onClick={voice.toggle}
+              className="shrink-0"
+            >
+              {voice.isListening ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+            </Button>
+          )}
           {isBusy ? (
             <Button size="sm" variant="destructive" onClick={onStop} className="flex-1">
               <Square className="h-3 w-3" /> Stop
             </Button>
           ) : !hasSpec ? (
-            // No spec yet — single design button
             <Button size="sm" onClick={handleSubmit} disabled={!input.trim()} className="flex-1">
               <Send className="h-3 w-3" /> Design Team
             </Button>
           ) : (
-            // Has spec — show edit + run buttons side by side
             <>
               <Button
                 size="sm"
