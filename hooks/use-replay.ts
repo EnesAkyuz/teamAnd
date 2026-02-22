@@ -20,6 +20,8 @@ export function useReplay() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [envSpec, setEnvSpec] = useState<EnvironmentSpec | null>(null);
   const [isReplaying, setIsReplaying] = useState(false);
+  const [synthesis, setSynthesis] = useState("");
+  const [isComplete, setIsComplete] = useState(false);
   const cancelRef = useRef(false);
 
   const processEvent = useCallback((event: AgentEvent) => {
@@ -73,6 +75,12 @@ export function useReplay() {
           return next;
         });
         break;
+      case "synthesis":
+        setSynthesis((prev) => prev + event.content);
+        break;
+      case "environment_complete":
+        setIsComplete(true);
+        break;
     }
   }, []);
 
@@ -80,6 +88,8 @@ export function useReplay() {
     setAgents(new Map());
     setEvents([]);
     setEnvSpec(null);
+    setSynthesis("");
+    setIsComplete(false);
     setIsReplaying(true);
     cancelRef.current = false;
 
@@ -139,5 +149,5 @@ export function useReplay() {
     setIsReplaying(false);
   }, []);
 
-  return { agents, events, envSpec, isReplaying, replay, stopReplay };
+  return { agents, events, envSpec, isReplaying, synthesis, isComplete, replay, stopReplay };
 }

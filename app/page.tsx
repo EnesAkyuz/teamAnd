@@ -310,16 +310,17 @@ export default function Home() {
         </div>
       )}
 
-      {/* Run summary — shows after synthesis starts */}
-      {(live.synthesis || live.isSynthesizing) && mode === "live" && (
+      {/* Run summary — shows after synthesis starts (live or replay) */}
+      {((mode === "live" && (live.synthesis || live.isSynthesizing)) ||
+        (mode === "replay" && replay.synthesis)) && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-20">
           <div className="pointer-events-auto">
             <DraggablePanel>
               <RunSummary
-                prompt={live.runPrompt}
-                synthesis={live.synthesis}
-                isSynthesizing={live.isSynthesizing}
-                isComplete={live.isComplete}
+                prompt={mode === "live" ? live.runPrompt : "Replay"}
+                synthesis={mode === "live" ? live.synthesis : replay.synthesis}
+                isSynthesizing={mode === "live" ? live.isSynthesizing : false}
+                isComplete={mode === "live" ? live.isComplete : replay.isComplete}
               />
             </DraggablePanel>
           </div>
@@ -327,7 +328,8 @@ export default function Home() {
       )}
 
       {/* Event log */}
-      {hasContent && activeEvents.length > 0 && !(live.synthesis || live.isSynthesizing) && (
+      {hasContent && activeEvents.length > 0 &&
+        !(mode === "live" ? (live.synthesis || live.isSynthesizing) : replay.synthesis) && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-10">
           <div className="pointer-events-auto">
             <DraggablePanel>
