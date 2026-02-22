@@ -253,6 +253,38 @@ supabase/
 
 ---
 
+## Collaboration & Sharing
+
+### Shareable Environments
+Share entire environments (bucket items + configs) with a short share code. Anyone can import a shared environment to get an exact copy with all resources and team designs.
+
+- **Share** — Click the share icon next to any environment in the switcher. A unique code is generated and copied to clipboard.
+- **Import** — Paste a share code in the Import section of the environment switcher to create a local copy.
+- **Browse** — Visit `/shared` to see all shared packages and import with one click.
+
+### Registry Consolidator
+As your registry grows, duplicate or near-duplicate resources accumulate. The **Consolidate** button in the registry header uses AI to:
+- Identify similar items across all environments (rules, skills, values — not tools)
+- Merge them into single consolidated resources
+- Automatically update all configs that referenced the old items to point to the new ones
+
+### Environment Versioning
+Every mutation to an environment (saving a config, adding/removing bucket items, importing, consolidating) auto-increments its version number. A full snapshot is stored at each version.
+
+- **Version badge** — Shown in the environment switcher (`v1`, `v2`, etc.)
+- **Version history** — Expand the Versions section in the switcher to browse all snapshots with timestamps and item/config counts
+- **Rollback** — Click the rollback button on any version to restore that exact state (bucket items + configs)
+
+### Agent Memory Fragments
+Agents can now **write persistent memory** during execution. Every agent has access to an `update_memory` tool that saves learnings, observations, and insights as bucket items.
+
+- Memory fragments are stored with category `"memory"` and labeled with the agent's role (e.g., `Research Lead: API rate limits`)
+- They appear in the bucket panel and registry alongside other resources
+- On subsequent runs, an agent's existing memory fragments are automatically loaded into its context
+- Memory accumulates across runs, allowing agents to build institutional knowledge
+
+---
+
 ## License
 
 MIT
