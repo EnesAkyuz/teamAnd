@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
-import { BookOpen, X } from "lucide-react";
+import { BookOpen, Package, X } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
 import { RunSummary } from "@/components/run-summary";
 import { AgentDetail } from "@/components/agent-detail";
@@ -214,6 +214,14 @@ export default function Home() {
             Back to Live
           </Button>
         )}
+
+        <Link
+          href="/shared"
+          className="pointer-events-auto flex items-center gap-1 rounded-lg border border-border/60 bg-background/80 px-2.5 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-md transition-colors hover:text-foreground"
+        >
+          <Package className="h-3 w-3" />
+          Shared
+        </Link>
 
         <Link
           href="/registry"

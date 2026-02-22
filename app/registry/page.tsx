@@ -81,6 +81,7 @@ export default function RegistryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [environments, setEnvironments] = useState<{ id: string; name: string }[]>([]);
+  const [envFilter, setEnvFilter] = useState<string>("all");
   const [copyTarget, setCopyTarget] = useState<string | null>(null);
 
   // Alignment chat state — persisted in Supabase
@@ -290,6 +291,7 @@ export default function RegistryPage() {
 
   // Filter items
   const filtered = items.filter((item) => {
+    if (envFilter !== "all" && item.environmentName !== envFilter) return false;
     if (alignmentFilter === "all") return true;
     if (alignmentFilter === "unreviewed") return !item.alignment;
     return item.alignment === alignmentFilter;
@@ -302,6 +304,10 @@ export default function RegistryPage() {
         <div className="flex items-center gap-3 px-6 py-2.5">
           <Link href="/" className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" /> Canvas
+          </Link>
+          <div className="h-4 w-px bg-border" />
+          <Link href="/shared" className="text-xs text-muted-foreground transition-colors hover:text-foreground">
+            Shared
           </Link>
           <div className="h-4 w-px bg-border" />
           <h1 className="text-sm font-semibold">Resource Registry</h1>
@@ -358,6 +364,22 @@ export default function RegistryPage() {
               </button>
             ))}
           </div>
+
+          {environments.length > 1 && (
+            <>
+              <div className="h-4 w-px bg-border" />
+              <select
+                value={envFilter}
+                onChange={(e) => setEnvFilter(e.target.value)}
+                className="rounded-md border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground focus:outline-none focus:border-primary/40"
+              >
+                <option value="all">All Environments</option>
+                {environments.map((env) => (
+                  <option key={env.id} value={env.name}>{env.name}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       </header>
 

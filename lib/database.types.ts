@@ -256,6 +256,36 @@ export type Database = {
         }
         Relationships: []
       }
+      shared_packages: {
+        Row: {
+          created_at: string | null
+          creator_name: string
+          description: string | null
+          environment_name: string
+          id: string
+          package_data: Json
+          share_code: string
+        }
+        Insert: {
+          created_at?: string | null
+          creator_name?: string
+          description?: string | null
+          environment_name: string
+          id?: string
+          package_data: Json
+          share_code: string
+        }
+        Update: {
+          created_at?: string | null
+          creator_name?: string
+          description?: string | null
+          environment_name?: string
+          id?: string
+          package_data?: Json
+          share_code?: string
+        }
+        Relationships: []
+      }
       user_profile: {
         Row: {
           id: string

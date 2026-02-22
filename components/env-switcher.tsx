@@ -9,6 +9,11 @@ import {
   Save,
   GitBranch,
   Clock,
+  Share2,
+  Check,
+  Copy,
+  Loader2,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Environment, Config, Run } from "@/hooks/use-environments";
@@ -54,6 +59,13 @@ export function EnvSwitcher({
   const [newName, setNewName] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
   const [configName, setConfigName] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importCode, setImportCode] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,6 +76,59 @@ export function EnvSwitcher({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const handleShare = async () => {
+    if (!activeEnv) return;
+    setSharing(true);
+    setShareCode(null);
+    try {
+      let creatorName = localStorage.getItem("teamand_creator_name");
+      if (!creatorName) {
+        creatorName = prompt("Your name (for shared packages):") || "Anonymous";
+        localStorage.setItem("teamand_creator_name", creatorName);
+      }
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ environmentId: activeEnv.id, creatorName }),
+      });
+      const data = await res.json();
+      if (data.shareCode) setShareCode(data.shareCode);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const copyShareCode = () => {
+    if (shareCode) {
+      navigator.clipboard.writeText(shareCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importCode.trim()) return;
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const res = await fetch("/api/share/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shareCode: importCode.trim() }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setImportError(data.error);
+      } else {
+        window.location.reload();
+      }
+    } catch {
+      setImportError("Import failed");
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   return (
     <div ref={ref} className="relative">
@@ -99,6 +164,16 @@ export function EnvSwitcher({
                   >
                     {env.name}
                   </button>
+                  {env.id === activeEnv?.id && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleShare(); }}
+                      className="text-muted-foreground hover:text-primary p-0.5"
+                      title="Share environment"
+                    >
+                      {sharing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Share2 className="h-3 w-3" />}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => onDeleteEnv(env.id)}
@@ -109,6 +184,18 @@ export function EnvSwitcher({
                 </div>
               ))}
             </div>
+            {shareCode && (
+              <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-primary/5 border border-primary/20 px-2 py-1.5">
+                <code className="flex-1 text-[11px] font-mono text-primary">{shareCode}</code>
+                <button
+                  type="button"
+                  onClick={copyShareCode}
+                  className="text-[10px] text-primary hover:text-primary/80"
+                >
+                  {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </button>
+              </div>
+            )}
             {creating ? (
               <div className="mt-1.5 flex gap-1">
                 <input
@@ -218,7 +305,7 @@ export function EnvSwitcher({
 
           {/* Runs */}
           {activeConfig && runs.length > 0 && (
-            <div className="px-3 py-2">
+            <div className="border-b border-border/40 px-3 py-2">
               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
                 <Clock className="mr-1 inline h-3 w-3" />
                 Runs
@@ -247,6 +334,44 @@ export function EnvSwitcher({
               </div>
             </div>
           )}
+
+          {/* Import */}
+          <div className="border-t border-border/40 px-3 py-2">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+              <Download className="mr-1 inline h-3 w-3" />
+              Import
+            </p>
+            {importing ? (
+              <div className="space-y-1.5">
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={importCode}
+                    onChange={(e) => setImportCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && importCode.trim()) handleImport();
+                      if (e.key === "Escape") setImporting(false);
+                    }}
+                    placeholder="Paste share code..."
+                    className="flex-1 rounded-md border border-border/60 bg-background px-2 py-0.5 text-[11px] font-mono focus:outline-none"
+                    autoFocus
+                  />
+                  <Button size="xs" onClick={handleImport} disabled={importLoading || !importCode.trim()}>
+                    {importLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Import"}
+                  </Button>
+                </div>
+                {importError && <p className="text-[10px] text-destructive">{importError}</p>}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setImporting(true)}
+                className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80"
+              >
+                <Download className="h-3 w-3" /> Import from share code
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
