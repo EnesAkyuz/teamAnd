@@ -69,6 +69,9 @@ export function useOrchestrate() {
   const [plannerThinking, setPlannerThinking] = useState("");
   const [plannerOutput, setPlannerOutput] = useState("");
   const [isComplete, setIsComplete] = useState(false);
+  const [synthesis, setSynthesis] = useState("");
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [runPrompt, setRunPrompt] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -125,8 +128,13 @@ export function useOrchestrate() {
           return next;
         });
         break;
+      case "synthesis":
+        setIsSynthesizing(true);
+        setSynthesis((prev) => prev + event.content);
+        break;
       case "environment_complete":
         setIsComplete(true);
+        setIsSynthesizing(false);
         break;
       case "error":
         console.error("Orchestration error:", event.message);
@@ -233,6 +241,9 @@ export function useOrchestrate() {
   const execute = useCallback(async (bucketItems?: BucketItem[], prompt?: string, configId?: string) => {
     if (!envSpec) return;
 
+    setRunPrompt(prompt ?? envSpec.objective);
+    setSynthesis("");
+    setIsSynthesizing(false);
     setAgents(
       new Map(
         envSpec.agents.map((a) => [
@@ -337,6 +348,9 @@ export function useOrchestrate() {
     isDesigning,
     isRunning,
     isComplete,
+    synthesis,
+    isSynthesizing,
+    runPrompt,
     plannerThinking,
     plannerOutput,
     chatMessages,

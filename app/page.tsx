@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { BookOpen, X } from "lucide-react";
 import { AgentCanvas } from "@/components/agent-canvas";
+import { RunSummary } from "@/components/run-summary";
 import { AgentDetail } from "@/components/agent-detail";
 import { EventLog } from "@/components/event-log";
 import { ChatPanel } from "@/components/chat-panel";
@@ -309,8 +310,24 @@ export default function Home() {
         </div>
       )}
 
+      {/* Run summary — shows after synthesis starts */}
+      {(live.synthesis || live.isSynthesizing) && mode === "live" && (
+        <div className="pointer-events-none absolute bottom-3 right-3 z-20">
+          <div className="pointer-events-auto">
+            <DraggablePanel>
+              <RunSummary
+                prompt={live.runPrompt}
+                synthesis={live.synthesis}
+                isSynthesizing={live.isSynthesizing}
+                isComplete={live.isComplete}
+              />
+            </DraggablePanel>
+          </div>
+        </div>
+      )}
+
       {/* Event log */}
-      {hasContent && activeEvents.length > 0 && (
+      {hasContent && activeEvents.length > 0 && !(live.synthesis || live.isSynthesizing) && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-10">
           <div className="pointer-events-auto">
             <DraggablePanel>

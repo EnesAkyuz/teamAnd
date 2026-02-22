@@ -279,9 +279,40 @@ export async function* executeAgents(
     if (level.length === 1) {
       yield* runAgent(level[0], spec, completed, skillContent, userPrompt);
     } else {
-      // Run parallel agents with real-time event streaming
       yield* runAgentsParallel(level, spec, completed, skillContent, userPrompt);
     }
+  }
+
+  // Synthesize collective output from all agents
+  if (Object.keys(completed).length > 1) {
+    const agentOutputs = spec.agents
+      .filter((a) => completed[a.id])
+      .map((a) => `## ${a.role}\n${completed[a.id]}`)
+      .join("\n\n---\n\n");
+
+    const synthesisStream = client.messages.stream({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8000,
+      system: `You are a synthesis agent. Given the outputs of multiple specialized agents working on a task, create a cohesive final deliverable. Do NOT simply concatenate — integrate, resolve conflicts, remove redundancy, and produce a unified result. Be thorough but avoid repeating what agents already said verbatim. Format with clear structure.`,
+      messages: [
+        {
+          role: "user",
+          content: `Task objective: ${spec.objective}${userPrompt ? `\nUser prompt: ${userPrompt}` : ""}\n\nAgent outputs:\n\n${agentOutputs}\n\nSynthesize these into a single cohesive deliverable.`,
+        },
+      ],
+    });
+
+    let synthesis = "";
+    for await (const event of synthesisStream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        synthesis += event.delta.text;
+        yield { type: "synthesis", content: event.delta.text, timestamp: Date.now() };
+      }
+    }
+  } else if (Object.keys(completed).length === 1) {
+    // Single agent — its output IS the synthesis
+    const output = Object.values(completed)[0];
+    yield { type: "synthesis", content: output, timestamp: Date.now() };
   }
 
   yield { type: "environment_complete", summary: "All agents completed their tasks.", timestamp: Date.now() };
@@ -453,7 +484,13 @@ function buildAgentPrompt(
     parts.push(`Skill Definitions (follow these methodologies):\n\n${injectedSkills.join("\n\n")}`);
   }
 
-  parts.push("You are part of a team. Stay focused on YOUR role. Be concise but thorough. Output your work directly.");
+  parts.push(`COLLABORATION RULES:
+- You are part of a team. Stay focused ONLY on YOUR specific role.
+- Do NOT repeat, summarize, or restate what other team members have already produced.
+- If you receive context from team members, BUILD ON their work — don't redo it.
+- Your output should be COMPLEMENTARY and DISTINCT from others.
+- Reference other agents' work briefly if needed, but add NEW value.
+- Be concise but thorough. Output your unique contribution directly.`);
 
   return parts.join("\n\n");
 }

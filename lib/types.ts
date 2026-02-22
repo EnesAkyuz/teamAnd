@@ -44,6 +44,7 @@ export type AgentEvent =
       result: string;
       timestamp: number;
     }
+  | { type: "synthesis"; content: string; timestamp: number }
   | { type: "environment_complete"; summary: string; timestamp: number }
   | { type: "error"; message: string; timestamp: number };
 
