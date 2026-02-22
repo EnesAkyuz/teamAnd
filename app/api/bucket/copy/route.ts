@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { bumpVersion } from "@/lib/versioning";
 
 export async function POST(request: Request) {
   const { itemId, environmentId } = await request.json();
@@ -25,5 +26,6 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 400 });
+  await bumpVersion(environmentId);
   return Response.json(data);
 }

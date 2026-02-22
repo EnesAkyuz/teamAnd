@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { bumpVersion } from "@/lib/versioning";
 import type { Json } from "@/lib/database.types";
 
 export async function POST(request: Request) {
@@ -50,5 +51,6 @@ export async function POST(request: Request) {
     await supabase.from("configs").insert(cfgs);
   }
 
+  await bumpVersion(env.id);
   return Response.json({ environmentId: env.id, environmentName: env.name });
 }

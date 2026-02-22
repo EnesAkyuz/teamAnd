@@ -9,6 +9,8 @@ import {
   Save,
   GitBranch,
   Clock,
+  History,
+  RotateCcw,
   Share2,
   Check,
   Copy,
@@ -66,7 +68,16 @@ export function EnvSwitcher({
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [versions, setVersions] = useState<{ id: string; version: number; createdAt: string; itemCount: number; configCount: number }[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Clear version history when switching environments
+  useEffect(() => {
+    setVersions([]);
+    setShowVersions(false);
+  }, [activeEnv?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,6 +118,28 @@ export function EnvSwitcher({
     }
   };
 
+  const fetchVersions = async () => {
+    if (!activeEnv) return;
+    const res = await fetch(`/api/environments/${activeEnv.id}/versions`);
+    const data = await res.json();
+    setVersions(data);
+  };
+
+  const handleRollback = async (version: number) => {
+    if (!activeEnv) return;
+    setRollingBack(true);
+    try {
+      await fetch(`/api/environments/${activeEnv.id}/versions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version }),
+      });
+      window.location.reload();
+    } finally {
+      setRollingBack(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!importCode.trim()) return;
     setImportLoading(true);
@@ -139,6 +172,7 @@ export function EnvSwitcher({
       >
         <FolderOpen className="h-3.5 w-3.5" />
         {activeEnv?.name ?? "No environment"}
+        {activeEnv && <span className="rounded bg-muted px-1 py-0.5 text-[9px] font-mono text-muted-foreground">v{activeEnv.version}</span>}
         <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
@@ -332,6 +366,50 @@ export function EnvSwitcher({
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Version History */}
+          {activeEnv && (
+            <div className="border-b border-border/40 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => { setShowVersions(!showVersions); if (!showVersions) fetchVersions(); }}
+                className="flex w-full items-center gap-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground hover:text-foreground"
+              >
+                <History className="h-3 w-3" />
+                Versions
+                <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[9px] font-mono normal-case">v{activeEnv.version}</span>
+                <ChevronDown className={`ml-auto h-2.5 w-2.5 transition-transform ${showVersions ? "rotate-180" : ""}`} />
+              </button>
+              {showVersions && (
+                <div className="mt-1.5 max-h-32 space-y-0.5 overflow-y-auto">
+                  {versions.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground/50">No version history yet</p>
+                  ) : (
+                    versions.map((v) => (
+                      <div key={v.id} className="flex items-center gap-2 rounded-md px-2 py-1 text-[11px] hover:bg-muted/50">
+                        <span className="font-mono text-[10px] text-muted-foreground">v{v.version}</span>
+                        <span className="flex-1 text-[10px] text-muted-foreground/70">
+                          {v.itemCount} items · {v.configCount} configs
+                        </span>
+                        <span className="text-[9px] text-muted-foreground/50">
+                          {new Date(v.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRollback(v.version)}
+                          disabled={rollingBack}
+                          className="text-muted-foreground hover:text-primary p-0.5"
+                          title={`Rollback to v${v.version}`}
+                        >
+                          {rollingBack ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           )}
 

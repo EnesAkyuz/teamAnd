@@ -134,24 +134,59 @@ export type Database = {
           },
         ]
       }
+      environment_versions: {
+        Row: {
+          created_at: string | null
+          environment_id: string
+          id: string
+          snapshot: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string | null
+          environment_id: string
+          id?: string
+          snapshot: Json
+          version: number
+        }
+        Update: {
+          created_at?: string | null
+          environment_id?: string
+          id?: string
+          snapshot?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "environment_versions_environment_id_fkey"
+            columns: ["environment_id"]
+            isOneToOne: false
+            referencedRelation: "environments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       environments: {
         Row: {
           created_at: string | null
           id: string
           name: string
           updated_at: string | null
+          version: number
         }
         Insert: {
           created_at?: string | null
           id?: string
           name: string
           updated_at?: string | null
+          version?: number
         }
         Update: {
           created_at?: string | null
           id?: string
           name?: string
           updated_at?: string | null
+          version?: number
         }
         Relationships: []
       }

@@ -43,5 +43,5 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 400 });
-  return Response.json({ shareCode, id: data.id });
+  return Response.json({ shareCode, id: data.id, version: env.version ?? 1 });
 }

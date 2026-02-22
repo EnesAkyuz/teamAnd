@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { supabase } from "@/lib/supabase";
+import { bumpVersion } from "@/lib/versioning";
 
 const client = new Anthropic();
 
@@ -235,6 +236,7 @@ If nothing should be consolidated, return {"groups": [], "reasoning": "explanati
             }
 
             totalConsolidated += oldIds.length;
+            await bumpVersion(envId);
           }
 
           send({ type: "group_done", group: group.newLabel, removed: affectedItems.length });

@@ -6,6 +6,7 @@ import type { EnvironmentSpec } from "@/lib/types";
 export interface Environment {
   id: string;
   name: string;
+  version: number;
   createdAt: string;
 }
 
@@ -38,10 +39,11 @@ export function useEnvironments() {
     fetch("/api/environments")
       .then((r) => r.json())
       .then((data) => {
-        const envs = data.map((d: Record<string, string>) => ({
-          id: d.id,
-          name: d.name,
-          createdAt: d.created_at,
+        const envs = data.map((d: Record<string, unknown>) => ({
+          id: d.id as string,
+          name: d.name as string,
+          version: (d.version as number) ?? 1,
+          createdAt: d.created_at as string,
         }));
         setEnvironments(envs);
         if (envs.length > 0 && !activeEnvId) {
@@ -95,7 +97,7 @@ export function useEnvironments() {
     });
     const data = await res.json();
     if (data.id) {
-      const env = { id: data.id, name: data.name, createdAt: data.created_at };
+      const env = { id: data.id, name: data.name, version: data.version ?? 1, createdAt: data.created_at };
       setEnvironments((prev) => [env, ...prev]);
       setActiveEnvId(data.id);
     }

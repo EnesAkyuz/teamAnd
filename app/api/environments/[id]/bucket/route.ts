@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { bumpVersion } from "@/lib/versioning";
 
 export async function GET(
   _request: Request,
@@ -22,5 +23,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .select()
     .single();
   if (error) return Response.json({ error: error.message }, { status: 400 });
+  await bumpVersion(id);
   return Response.json(data);
 }
