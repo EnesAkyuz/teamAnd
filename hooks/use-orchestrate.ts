@@ -330,6 +330,9 @@ export function useOrchestrate() {
     setIsDesigning(false);
     setIsRunning(false);
     setIsComplete(false);
+    setSynthesis("");
+    setIsSynthesizing(false);
+    setRunPrompt("");
     setPlannerThinking("");
     setPlannerOutput("");
     setChatMessages([]);

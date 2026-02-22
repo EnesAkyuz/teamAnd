@@ -310,10 +310,10 @@ export default function Home() {
         </div>
       )}
 
-      {/* Run summary — shows after synthesis starts (live or replay) */}
+      {/* Run summary */}
       {((mode === "live" && (live.synthesis || live.isSynthesizing)) ||
         (mode === "replay" && replay.synthesis)) && (
-        <div className="pointer-events-none absolute bottom-3 right-3 z-20">
+        <div className="pointer-events-none absolute top-14 right-3 z-20">
           <div className="pointer-events-auto">
             <DraggablePanel>
               <RunSummary
@@ -327,9 +327,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Event log */}
-      {hasContent && activeEvents.length > 0 &&
-        !(mode === "live" ? (live.synthesis || live.isSynthesizing) : replay.synthesis) && (
+      {/* Event log — always visible when there are events */}
+      {hasContent && activeEvents.length > 0 && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-10">
           <div className="pointer-events-auto">
             <DraggablePanel>
