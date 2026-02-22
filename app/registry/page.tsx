@@ -19,6 +19,7 @@ import {
   Sparkles,
   Star,
   Trash2,
+  Merge,
   Wrench,
   X,
   Zap,
@@ -83,6 +84,11 @@ export default function RegistryPage() {
   const [environments, setEnvironments] = useState<{ id: string; name: string }[]>([]);
   const [envFilter, setEnvFilter] = useState<string>("all");
   const [copyTarget, setCopyTarget] = useState<string | null>(null);
+
+  // Consolidation state
+  const [consolidating, setConsolidating] = useState(false);
+  const [consolidateLog, setConsolidateLog] = useState<string[]>([]);
+  const [showConsolidateLog, setShowConsolidateLog] = useState(false);
 
   // Alignment chat state — persisted in Supabase
   interface ChatMsg { role: "user" | "assistant"; content: string; thinking?: string; toolCalls?: string[] }
@@ -289,6 +295,45 @@ export default function RegistryPage() {
     await fetch("/api/alignment/messages", { method: "DELETE" });
   };
 
+  // Consolidation
+  const handleConsolidate = async () => {
+    setConsolidating(true);
+    setConsolidateLog([]);
+    setShowConsolidateLog(true);
+    try {
+      const res = await fetch("/api/registry/consolidate", { method: "POST" });
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "status" || event.type === "error") {
+              setConsolidateLog((prev) => [...prev, event.message]);
+            } else if (event.type === "group_done") {
+              setConsolidateLog((prev) => [...prev, `✓ ${event.group} (removed ${event.removed} duplicates)`]);
+            } else if (event.type === "config_updated") {
+              setConsolidateLog((prev) => [...prev, `  ↳ Updated config references`]);
+            } else if (event.type === "done") {
+              if (event.consolidated > 0) fetchItems();
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch (e) {
+      setConsolidateLog((prev) => [...prev, `Error: ${e instanceof Error ? e.message : "Unknown"}`]);
+    } finally {
+      setConsolidating(false);
+    }
+  };
+
   // Filter items
   const filtered = items.filter((item) => {
     if (envFilter !== "all" && item.environmentName !== envFilter) return false;
@@ -313,6 +358,16 @@ export default function RegistryPage() {
           <h1 className="text-sm font-semibold">Resource Registry</h1>
           <Badge variant="secondary" className="text-[10px]">{items.length} items</Badge>
           <div className="flex-1" />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleConsolidate}
+            disabled={consolidating}
+            className="h-7 gap-1.5 text-[11px]"
+          >
+            {consolidating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Merge className="h-3 w-3" />}
+            {consolidating ? "Consolidating..." : "Consolidate"}
+          </Button>
           <ThemeToggle />
         </div>
 
@@ -387,6 +442,27 @@ export default function RegistryPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Resource list */}
         <div className="flex-1 overflow-y-auto p-4">
+          {showConsolidateLog && consolidateLog.length > 0 && (
+            <div className="mb-3 rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Merge className="h-3 w-3 text-primary" />
+                  <span className="text-[11px] font-medium">Consolidation Log</span>
+                  {consolidating && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                </div>
+                {!consolidating && (
+                  <button type="button" onClick={() => setShowConsolidateLog(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              <div className="max-h-32 overflow-y-auto space-y-0.5">
+                {consolidateLog.map((msg, i) => (
+                  <p key={`cl-${i}`} className="text-[10px] text-muted-foreground font-mono">{msg}</p>
+                ))}
+              </div>
+            </div>
+          )}
           {loading ? (
             <p className="py-12 text-center text-sm text-muted-foreground">Loading...</p>
           ) : filtered.length === 0 ? (
