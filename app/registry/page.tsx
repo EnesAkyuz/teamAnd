@@ -367,27 +367,49 @@ export default function RegistryPage() {
             <p className="py-12 text-center text-sm text-muted-foreground">No resources found.</p>
           ) : (
             <div className="space-y-1.5">
-              {filtered.map((item) => (
-                <div key={item.id} className="group rounded-lg border border-border/80 bg-card transition-colors hover:border-border">
-                  <div className="flex items-center gap-2.5 px-3 py-2.5">
-                    {/* Alignment dot */}
-                    {item.alignment ? (
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <span className={`h-2 w-2 shrink-0 rounded-full ${alignmentDot(item.alignment)}`} />
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-xs text-xs">
-                          <p className="font-medium capitalize">{item.alignment}</p>
-                          {item.alignmentReason && <p className="mt-0.5 text-muted-foreground">{item.alignmentReason}</p>}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="h-2 w-2 shrink-0 rounded-full border border-border" />
-                    )}
+              {filtered.map((item) => {
+                const borderClass =
+                  item.alignment === "favorable" ? "border-status-done/40" :
+                  item.alignment === "conflicting" ? "border-destructive/40" :
+                  item.alignment === "neutral" ? "border-muted-foreground/30" :
+                  "border-border/80";
+                const bgClass =
+                  item.alignment === "favorable" ? "bg-[var(--status-done-bg)]" :
+                  item.alignment === "conflicting" ? "bg-[var(--danger-bg)]" :
+                  "bg-card";
+                const leftAccent =
+                  item.alignment === "favorable" ? "bg-status-done" :
+                  item.alignment === "conflicting" ? "bg-destructive" :
+                  item.alignment === "neutral" ? "bg-muted-foreground" :
+                  "";
 
+                return (
+                <div key={item.id} className={`group relative overflow-hidden rounded-lg border ${borderClass} ${bgClass} transition-colors hover:border-border`}>
+                  {/* Left accent bar */}
+                  {leftAccent && (
+                    <div className={`absolute left-0 top-0 bottom-0 w-0.5 ${leftAccent}`} />
+                  )}
+
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 pl-3.5">
                     {categoryIcon(item.category)}
                     <span className="text-xs font-medium">{item.label}</span>
                     <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">{item.category}</Badge>
+
+                    {item.alignment && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1.5 py-0 h-4 ${
+                          item.alignment === "favorable" ? "border-status-done/50 text-status-done" :
+                          item.alignment === "conflicting" ? "border-destructive/50 text-destructive" :
+                          "border-muted-foreground/50 text-muted-foreground"
+                        }`}
+                      >
+                        {item.alignment === "favorable" ? <Check className="mr-0.5 h-2.5 w-2.5" /> :
+                         item.alignment === "conflicting" ? <X className="mr-0.5 h-2.5 w-2.5" /> : null}
+                        {item.alignment}
+                      </Badge>
+                    )}
+
                     <span className="text-[10px] text-muted-foreground">{item.environmentName}</span>
                     <div className="flex-1" />
 
@@ -418,9 +440,16 @@ export default function RegistryPage() {
                     </Button>
                   </div>
 
-                  {/* Content preview (always show first lines for skills) */}
+                  {/* Alignment reason inline */}
+                  {item.alignmentReason && (
+                    <div className="px-3.5 pb-1.5 -mt-1">
+                      <p className="text-[10px] italic text-muted-foreground">{item.alignmentReason}</p>
+                    </div>
+                  )}
+
+                  {/* Content preview */}
                   {item.content && expandedId !== item.id && (
-                    <div className="border-t border-border/50 px-3 py-1.5">
+                    <div className="border-t border-border/30 px-3.5 py-1.5">
                       <p className="line-clamp-2 text-[11px] text-muted-foreground">{item.content.slice(0, 150)}</p>
                     </div>
                   )}
@@ -433,7 +462,8 @@ export default function RegistryPage() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
