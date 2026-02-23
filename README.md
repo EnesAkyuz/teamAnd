@@ -2,6 +2,8 @@
 
 **AI designs and runs its own team.** You give it a goal, configure the resources, and watch specialized agents think and collaborate in real-time on a visual canvas.
 
+<!-- Test: This line was added as a demonstration of editing skills. -->
+
 <img width="3358" height="1924" alt="image" src="https://github.com/user-attachments/assets/f8da3b3f-ccd4-416f-8edc-47c51a90d75a" />
 
 
@@ -228,63 +230,5 @@ app/
 components/
   agent-canvas.tsx      ← React Flow canvas with dagre layout
   agent-node.tsx        ← Custom node with resource badges + drop target
-  agent-detail.tsx      ← Editable detail panel with thinking/output
-  chat-panel.tsx        ← Multi-turn design/edit/run chat
-  bucket-panel.tsx      ← Resource palette with AI generation + search
-  env-switcher.tsx      ← Environment/config/run dropdown
-  draggable-panel.tsx   ← Pointer-event drag wrapper
-  theme-toggle.tsx      ← Light/dark toggle
-
-hooks/
-  use-orchestrate.ts    ← Design/edit/execute state machine
-  use-replay.ts         ← Batch event replay
-  use-bucket.ts         ← Scoped bucket CRUD
-  use-environments.ts   ← Env/config/run management
-
-lib/
-  orchestrator.ts       ← Claude orchestration engine
-  types.ts              ← Shared TypeScript types
-  supabase.ts           ← Typed Supabase client
-  database.types.ts     ← Auto-generated DB types
-
-supabase/
-  migrations/           ← 4 migration files
-```
-
----
-
-## Collaboration & Sharing
-
-### Shareable Environments
-Share entire environments (bucket items + configs) with a short share code. Anyone can import a shared environment to get an exact copy with all resources and team designs.
-
-- **Share** — Click the share icon next to any environment in the switcher. A unique code is generated and copied to clipboard.
-- **Import** — Paste a share code in the Import section of the environment switcher to create a local copy.
-- **Browse** — Visit `/shared` to see all shared packages and import with one click.
-
-### Registry Consolidator
-As your registry grows, duplicate or near-duplicate resources accumulate. The **Consolidate** button in the registry header uses AI to:
-- Identify similar items across all environments (rules, skills, values — not tools)
-- Merge them into single consolidated resources
-- Automatically update all configs that referenced the old items to point to the new ones
-
-### Environment Versioning
-Every mutation to an environment (saving a config, adding/removing bucket items, importing, consolidating) auto-increments its version number. A full snapshot is stored at each version.
-
-- **Version badge** — Shown in the environment switcher (`v1`, `v2`, etc.)
-- **Version history** — Expand the Versions section in the switcher to browse all snapshots with timestamps and item/config counts
-- **Rollback** — Click the rollback button on any version to restore that exact state (bucket items + configs)
-
-### Agent Memory Fragments
-Agents can now **write persistent memory** during execution. Every agent has access to an `update_memory` tool that saves learnings, observations, and insights as bucket items.
-
-- Memory fragments are stored with category `"memory"` and labeled with the agent's role (e.g., `Research Lead: API rate limits`)
-- They appear in the bucket panel and registry alongside other resources
-- On subsequent runs, an agent's existing memory fragments are automatically loaded into its context
-- Memory accumulates across runs, allowing agents to build institutional knowledge
-
----
-
-## License
-
-MIT
+  agent-detail.tsx      ← Editable detail panel with 
+...[truncated]
